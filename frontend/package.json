@@ -48,13 +48,14 @@
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
     "typescript": "~5.8.0",
-    "temporal-spec": "^1.0.1"
+    "temporal-spec": "^1.0.1",
+    "braces": "file:vendor/braces"
   },
   "engines": {
     "node": "^24.15.0"
   },
   "overrides": {
-    "braces": "file:vendor/braces",
+    "braces": "$braces",
     "@grpc/grpc-js": "^1.14.3",
     "webpack-dev-middleware": "^7.4.5"
   }
