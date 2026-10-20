@@ -7,18 +7,19 @@
     "build": "ng build",
     "test": "ng test",
     "lint": "ng lint",
-    "g": "ng"
+    "g": "ng",
+    "test:dependency-guards": "node --test vendor/braces/test.cjs"
   },
   "dependencies": {
-    "@angular/animations": "^20.0.0",
-    "@angular/common": "^20.0.0",
-    "@angular/compiler": "^20.0.0",
-    "@angular/core": "^20.0.0",
+    "@angular/animations": "^20.3.34",
+    "@angular/common": "^20.3.34",
+    "@angular/compiler": "^20.3.34",
+    "@angular/core": "^20.3.34",
     "@angular/fire": "^20.0.1",
-    "@angular/forms": "^20.0.0",
-    "@angular/platform-browser": "^20.0.0",
-    "@angular/platform-browser-dynamic": "^20.0.0",
-    "@angular/router": "^20.0.0",
+    "@angular/forms": "^20.3.34",
+    "@angular/platform-browser": "^20.3.34",
+    "@angular/platform-browser-dynamic": "^20.3.34",
+    "@angular/router": "^20.3.34",
     "firebase": "^12.2.1",
     "p5": "^1.7.0",
     "rxjs": "~7.8.0",
@@ -33,8 +34,8 @@
     "@angular-eslint/eslint-plugin-template": "20.2.0",
     "@angular-eslint/schematics": "20.2.0",
     "@angular-eslint/template-parser": "20.2.0",
-    "@angular/cli": "^20.2.2",
-    "@angular/compiler-cli": "^20.0.0",
+    "@angular/cli": "^20.3.40",
+    "@angular/compiler-cli": "^20.3.34",
     "@types/p5": "^1.7.0",
     "@types/three": "^0.158.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
@@ -46,6 +47,16 @@
     "karma-coverage": "~2.2.0",
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
-    "typescript": "~5.8.0"
+    "typescript": "~5.8.0",
+    "temporal-spec": "^1.0.1",
+    "braces": "file:vendor/braces"
+  },
+  "engines": {
+    "node": "^24.15.0"
+  },
+  "overrides": {
+    "braces": "$braces",
+    "@grpc/grpc-js": "^1.14.3",
+    "webpack-dev-middleware": "^7.4.5"
   }
 }
