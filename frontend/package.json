@@ -36,10 +36,12 @@
     "@angular-eslint/template-parser": "20.2.0",
     "@angular/cli": "^20.3.40",
     "@angular/compiler-cli": "^20.3.34",
+    "@types/jasmine": "~4.3.0",
     "@types/p5": "^1.7.0",
     "@types/three": "^0.158.0",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
+    "braces": "file:vendor/braces",
     "eslint": "^8.57.0",
     "jasmine-core": "~4.6.0",
     "karma": "~6.4.0",
@@ -47,9 +49,8 @@
     "karma-coverage": "~2.2.0",
     "karma-jasmine": "~5.1.0",
     "karma-jasmine-html-reporter": "~2.1.0",
-    "typescript": "~5.8.0",
     "temporal-spec": "^1.0.1",
-    "braces": "file:vendor/braces"
+    "typescript": "~5.8.0"
   },
   "engines": {
     "node": "^24.15.0"
@@ -57,6 +58,9 @@
   "overrides": {
     "braces": "$braces",
     "@grpc/grpc-js": "^1.14.3",
-    "webpack-dev-middleware": "^7.4.5"
+    "webpack-dev-middleware": "^7.4.5",
+    "sockjs": {
+      "uuid": "^11.1.0"
+    }
   }
 }
