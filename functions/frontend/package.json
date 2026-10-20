@@ -1,8 +1,18 @@
 {
   "devDependencies": {
-    "firebase-tools": "^15.34.0"
+    "firebase-tools": "^15.34.0",
+    "braces": "file:vendor/braces"
   },
   "engines": {
     "node": "^24.15.0"
+  },
+  "overrides": {
+    "braces": "$braces",
+    "gaxios": {
+      "uuid": "^11.1.1"
+    }
+  },
+  "scripts": {
+    "test:dependency-guards": "node --test vendor/braces/test.cjs"
   }
 }

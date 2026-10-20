@@ -1,5 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
+import { ApiService } from '../api.service';
+
 import { MemoryCreateComponent } from './memory-create.component';
 
 describe('MemoryCreateComponent', () => {
@@ -8,7 +10,8 @@ describe('MemoryCreateComponent', () => {
 
   beforeEach(() => {
     TestBed.configureTestingModule({
-      declarations: [MemoryCreateComponent]
+      imports: [MemoryCreateComponent],
+      providers: [{ provide: ApiService, useValue: {} }]
     });
     fixture = TestBed.createComponent(MemoryCreateComponent);
     component = fixture.componentInstance;
