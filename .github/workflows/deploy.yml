@@ -13,7 +13,7 @@ on:
   workflow_dispatch:
 
 env:
-  NODE_VERSION: '22'
+  NODE_VERSION: '24'
   JAVA_VERSION: '17'
   FIREBASE_PROJECT_ID: 'cziczere-ai'
 
