@@ -77,7 +77,7 @@ jobs:
 
       - name: Run security audit
         working-directory: ./frontend
-        run: npm audit --audit-level=high
+        run: npm run test:dependency-guards && npm audit --audit-level=high
 
       - name: Run Snyk security scan
         continue-on-error: true
