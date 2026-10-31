@@ -36,6 +36,7 @@ class GenerateMemoryPlantTest {
     @BeforeEach
     void setUp() throws Exception {
         MockitoAnnotations.openMocks(this);
+        when(request.getFirstHeader("Origin")).thenReturn(Optional.of("http://localhost:4200"));
         function = new GenerateMemoryPlant(db, vertexAI, storage, firebaseAuth);
         when(firebaseAuth.verifyIdToken(anyString())).thenReturn(decodedToken);
         when(decodedToken.getUid()).thenReturn("fake-user-id");

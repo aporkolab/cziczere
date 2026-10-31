@@ -1,7 +1,7 @@
 {
   "devDependencies": {
-    "firebase-tools": "^15.34.0",
-    "braces": "file:vendor/braces"
+    "braces": "file:vendor/braces",
+    "firebase-tools": "^15.34.2"
   },
   "engines": {
     "node": "^24.15.0"

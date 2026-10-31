@@ -1,103 +1,116 @@
 <div class="container">
   <header>
     <h1>🌱 Cziczere: The Digital Memory Garden</h1>
-    <ng-container *ngIf="user | async as currentUser; else showLogin">
+    @if (user | async; as currentUser) {
       <div class="user-info">
         <button (click)="isArViewVisible = !isArViewVisible">
-          {{ isArViewVisible ? 'Exit AR Mode' : 'Enter AR Mode' }}
+          {{ isArViewVisible ? "Exit AR Mode" : "Enter AR Mode" }}
         </button>
         <span>Welcome, {{ currentUser.displayName }}!</span>
         <button (click)="logout()">Logout</button>
       </div>
-    </ng-container>
-    <ng-template #showLogin>
+    } @else {
       <button (click)="login()">Login with Google</button>
-    </ng-template>
+    }
   </header>
 
-  <main *ngIf="user | async">
-    <!-- Floating Action Button -->
-    <button 
-      *ngIf="!showMemoryForm" 
-      class="floating-action-button"
-      (click)="toggleMemoryForm()"
-      [disabled]="isLoading$ | async">
-      <span class="fab-icon">🌱</span>
-      <span class="fab-text">Plant a Memory</span>
-    </button>
-
-    <!-- Floating Memory Form -->
-    <div *ngIf="showMemoryForm" class="floating-memory-form">
-      <div class="form-header">
-        <h3>🌱 Plant a New Memory</h3>
-        <button class="close-form-button" (click)="showMemoryForm = false">✕</button>
+  @if (user | async) {
+    <main>
+      <!-- Floating Action Button -->
+      @if (!showMemoryForm) {
+        <button
+          class="floating-action-button"
+          (click)="toggleMemoryForm()"
+          [disabled]="isLoading$ | async"
+        >
+          <span class="fab-icon">🌱</span>
+          <span class="fab-text">Plant a Memory</span>
+        </button>
+      }
+      <!-- Floating Memory Form -->
+      @if (showMemoryForm) {
+        <div class="floating-memory-form">
+          <div class="form-header">
+            <h3>🌱 Plant a New Memory</h3>
+            <button class="close-form-button" (click)="showMemoryForm = false">
+              ✕
+            </button>
+          </div>
+          <app-memory-create
+            (memorySubmit)="onMemorySubmit($event)"
+            [isLoading]="!!(isLoading$ | async)"
+            [error]="memoryError$ | async"
+          >
+          </app-memory-create>
+        </div>
+      }
+      <div class="garden-display">
+        <h2>Your Latest Creation</h2>
+        @if (isLoading$ | async) {
+          <div class="loading-spinner">
+            <p>Planting your memory... the AI is hard at work!</p>
+            <div class="spinner"></div>
+          </div>
+        }
+        <app-garden (memoryClicked)="onMemoryClicked($event)"></app-garden>
       </div>
-      <app-memory-create 
-        (memorySubmit)="onMemorySubmit($event)" 
-        [isLoading]="!!(isLoading$ | async)"
-        [error]="memoryError$ | async">
-      </app-memory-create>
-    </div>
-
-    <div class="garden-display">
-      <h2>Your Latest Creation</h2>
-      <div *ngIf="isLoading$ | async" class="loading-spinner">
-        <p>Planting your memory... the AI is hard at work!</p>
-        <div class="spinner"></div>
+      <div class="gardener-actions">
+        <button
+          (click)="requestInsight('insight')"
+          [disabled]="isInsightLoading$ | async"
+        >
+          @if (!(isInsightLoading$ | async)) {
+            Ask for Insight
+          } @else {
+            <div class="spinner-small"></div>
+            Reflecting...
+          }
+        </button>
+        <button
+          (click)="requestInsight('weekly')"
+          [disabled]="isInsightLoading$ | async"
+        >
+          @if (!(isInsightLoading$ | async)) {
+            Get Weekly Summary
+          } @else {
+            <div class="spinner-small"></div>
+            Summarizing...
+          }
+        </button>
+        <button (click)="onExportPoster()" [disabled]="isExporting$ | async">
+          @if (!(isExporting$ | async)) {
+            Export Garden as Poster
+          } @else {
+            <div class="spinner-small"></div>
+            Exporting...
+          }
+        </button>
       </div>
+      <app-insight-display
+        [insight]="(latestInsight$ | async) || null"
+      ></app-insight-display>
+    </main>
+  }
 
-    <app-garden (memoryClicked)="onMemoryClicked($event)"></app-garden>
+  @if (!(user | async)) {
+    <div class="login-prompt">
+      <p>Please log in to cultivate your memory garden.</p>
     </div>
+  }
+</div>
 
-    <div class="gardener-actions">
-      <button (click)="requestInsight('insight')" [disabled]="isInsightLoading$ | async">
-        <ng-container *ngIf="!(isInsightLoading$ | async); else insightLoading">
-          Ask for Insight
-        </ng-container>
-        <ng-template #insightLoading>
-          <div class="spinner-small"></div>
-          Reflecting...
-        </ng-template>
-      </button>
+@if (selectedMemoryForDetail) {
+  <app-memory-detail
+    [memory]="selectedMemoryForDetail"
+    (close)="onDetailClose()"
+    (enterAr)="enterArModeForMemory($event)"
+  >
+  </app-memory-detail>
+}
 
-      <button (click)="requestInsight('weekly')" [disabled]="isInsightLoading$ | async">
-        <ng-container *ngIf="!(isInsightLoading$ | async); else insightLoading">
-          Get Weekly Summary
-        </ng-container>
-        <ng-template #insightLoading>
-          <div class="spinner-small"></div>
-          Summarizing...
-        </ng-template>
-      </button>
-
-      <button (click)="onExportPoster()" [disabled]="isExporting$ | async">
-        <ng-container *ngIf="!(isExporting$ | async); else exporting">
-          Export Garden as Poster
-        </ng-container>
-        <ng-template #exporting>
-          <div class="spinner-small"></div>
-          Exporting...
-        </ng-template>
-      </button>
-    </div>
-
-    <app-insight-display [insight]="(latestInsight$ | async) || null"></app-insight-display>
-
-  </main>
-
-  <div *ngIf="!(user | async)" class="login-prompt">
-    <p>Please log in to cultivate your memory garden.</p>
+@if (isArViewVisible) {
+  <div class="ar-view-container">
+    <button class="close-ar-button" (click)="exitArMode()">Exit AR</button>
+    <app-ar-view (memorySelected)="onArMemorySelected($event)"></app-ar-view>
   </div>
-</div>
-
-<app-memory-detail
-  *ngIf="selectedMemoryForDetail"
-  [memory]="selectedMemoryForDetail"
-  (close)="onDetailClose()"
-  (enterAr)="enterArModeForMemory($event)">
-</app-memory-detail>
-
-<div class="ar-view-container" *ngIf="isArViewVisible">
-  <button class="close-ar-button" (click)="exitArMode()">Exit AR</button>
-  <app-ar-view (memorySelected)="onArMemorySelected($event)"></app-ar-view>
-</div>
+}

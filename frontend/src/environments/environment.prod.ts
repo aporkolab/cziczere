@@ -10,14 +10,14 @@ export const environment = {
     measurementId: "${FIREBASE_MEASUREMENT_ID}"
   },
   apis: {
-    // Production Cloud Function URLs - automatically determined from project ID
-    generateMemoryPlant: `https://${process.env['FIREBASE_PROJECT_ID'] || 'us-central1'}-${process.env['FIREBASE_PROJECT_ID']}.cloudfunctions.net/generateMemoryPlant`,
-    analyzeMemories: `https://${process.env['FIREBASE_PROJECT_ID'] || 'us-central1'}-${process.env['FIREBASE_PROJECT_ID']}.cloudfunctions.net/analyzeMemories`,
-    getAtmosphere: `https://${process.env['FIREBASE_PROJECT_ID'] || 'us-central1'}-${process.env['FIREBASE_PROJECT_ID']}.cloudfunctions.net/getAtmosphere`,
-    exportGarden: `https://${process.env['FIREBASE_PROJECT_ID'] || 'us-central1'}-${process.env['FIREBASE_PROJECT_ID']}.cloudfunctions.net/exportGarden`,
-    getInsightAudio: `https://${process.env['FIREBASE_PROJECT_ID'] || 'us-central1'}-${process.env['FIREBASE_PROJECT_ID']}.cloudfunctions.net/getInsightAudio`,
-    poeticRephrasing: `https://${process.env['FIREBASE_PROJECT_ID'] || 'us-central1'}-${process.env['FIREBASE_PROJECT_ID']}.cloudfunctions.net/poeticRephrasing`,
-    chatWebSocket: `wss://${process.env['FIREBASE_PROJECT_ID'] || 'us-central1'}-${process.env['FIREBASE_PROJECT_ID']}.cloudfunctions.net/chatWebSocket`
+    // Placeholder URLs: the deploy workflow regenerates this file with the real project ID.
+    generateMemoryPlant: 'https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net/generateMemoryPlant',
+    analyzeMemories: 'https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net/analyzeMemories',
+    getAtmosphere: 'https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net/getAtmosphere',
+    exportGarden: 'https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net/exportGarden',
+    getInsightAudio: 'https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net/getInsightAudio',
+    poeticRephrasing: 'https://us-central1-YOUR_PROJECT_ID.cloudfunctions.net/poeticRephrasing',
+    chatWebSocket: 'wss://us-central1-YOUR_PROJECT_ID.cloudfunctions.net/chatWebSocket'
   },
   features: {
     enableAnalytics: true,
