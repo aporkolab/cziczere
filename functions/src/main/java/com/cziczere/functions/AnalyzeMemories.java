@@ -1,6 +1,5 @@
 package com.cziczere.functions;
 
-import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.firestore.CollectionReference;
 import com.google.cloud.firestore.DocumentSnapshot;
 import com.google.cloud.firestore.Firestore;
@@ -12,11 +11,7 @@ import com.google.cloud.functions.HttpResponse;
 import com.google.cloud.vertexai.VertexAI;
 import com.google.cloud.vertexai.api.GenerateContentResponse;
 import com.google.cloud.vertexai.generativeai.GenerativeModel;
-import com.google.firebase.FirebaseApp;
-import com.google.firebase.FirebaseOptions;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseAuthException;
-import com.google.firebase.auth.FirebaseToken;
 import com.google.gson.Gson;
 
 import java.io.BufferedWriter;
@@ -33,28 +28,15 @@ public class AnalyzeMemories implements HttpFunction {
     private static final Logger logger = Logger.getLogger(AnalyzeMemories.class.getName());
     private static final Gson gson = new Gson();
 
-    private static final String PROJECT_ID = System.getenv().getOrDefault("GCP_PROJECT_ID", "your-gcp-project-id");
-    private static final String REGION = System.getenv().getOrDefault("GCP_REGION", "us-central1");
+    private static final String PROJECT_ID = FunctionSupport.PROJECT_ID;
+    private static final String REGION = FunctionSupport.REGION;
 
     Firestore db;
     VertexAI vertexAI;
     FirebaseAuth firebaseAuth;
 
     static {
-        // Firebase Admin SDK initialization
-        try {
-            if (FirebaseApp.getApps().isEmpty()) {
-                GoogleCredentials credentials = GoogleCredentials.getApplicationDefault();
-                FirebaseOptions options = FirebaseOptions.builder()
-                    .setCredentials(credentials)
-                    .setProjectId(PROJECT_ID)
-                    .build();
-                FirebaseApp.initializeApp(options);
-                logger.info("Firebase Admin SDK initialized successfully.");
-            }
-        } catch (IOException e) {
-            logger.log(Level.SEVERE, "Firebase Admin SDK initialization failed.", e);
-        }
+        FunctionSupport.initFirebase();
     }
 
     public AnalyzeMemories() throws IOException {
@@ -70,15 +52,11 @@ public class AnalyzeMemories implements HttpFunction {
         this.firebaseAuth = firebaseAuth;
     }
 
-    // Custom exception for auth errors
-    static class AuthException extends Exception {
-        public AuthException(String message) {
-            super(message);
-        }
-    }
-
     @Override
     public void service(HttpRequest request, HttpResponse response) throws Exception {
+        if (FunctionSupport.handleCors(request, response, "POST")) {
+            return;
+        }
         response.appendHeader("Content-Type", "application/json");
 
         try (BufferedWriter writer = response.getWriter()) {
@@ -125,10 +103,10 @@ public class AnalyzeMemories implements HttpFunction {
                 response.setStatusCode(200, "OK");
                 writer.write(gson.toJson(newInsight));
 
-            } catch (AuthException e) {
+            } catch (FunctionSupport.AuthException e) {
                 logger.warning("Authentication failed: " + e.getMessage());
                 response.setStatusCode(401, "Unauthorized");
-                writer.write("{\"error\":\"" + e.getMessage() + "\"}");
+                writer.write(FunctionSupport.errorJson(e.getMessage()));
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Internal Server Error", e);
                 response.setStatusCode(500, "Internal Server Error.");
@@ -137,19 +115,8 @@ public class AnalyzeMemories implements HttpFunction {
         }
     }
 
-    String getUserIdFromAuthToken(HttpRequest request) throws AuthException {
-        Optional<String> authHeader = request.getFirstHeader("Authorization");
-        if (authHeader.isEmpty() || !authHeader.get().startsWith("Bearer ")) {
-            throw new AuthException("Authorization header is missing or not Bearer type.");
-        }
-
-        String idToken = authHeader.get().substring(7);
-        try {
-            FirebaseToken decodedToken = this.firebaseAuth.verifyIdToken(idToken);
-            return decodedToken.getUid();
-        } catch (FirebaseAuthException e) {
-            throw new AuthException("Invalid Firebase ID token: " + e.getMessage());
-        }
+    String getUserIdFromAuthToken(HttpRequest request) throws FunctionSupport.AuthException {
+        return FunctionSupport.requireUserId(request, firebaseAuth);
     }
 
     List<MemoryData> getMemoriesForUser(String userId) throws ExecutionException, InterruptedException {
@@ -169,7 +136,7 @@ public class AnalyzeMemories implements HttpFunction {
                 .map(MemoryData::userText)
                 .collect(Collectors.joining("\n---\n"));
 
-        GenerativeModel model = getGenerativeModel("gemini-1.5-flash-001");
+        GenerativeModel model = getGenerativeModel(FunctionSupport.GEMINI_MODEL);
         String systemPrompt = "You are the Gardener's Assistant. Your role is to help users reflect on their memories. " +
                 "You will be given a list of a user's memories, separated by '---'. " +
                 "Your task is to identify a recurring positive theme, pattern, or source of joy in these memories. " +
@@ -200,7 +167,7 @@ public class AnalyzeMemories implements HttpFunction {
                 .map(m -> "Memory: " + m.userText() + "\nEmotions: " + gson.toJson(m.emotions()))
                 .collect(Collectors.joining("\n---\n"));
 
-        GenerativeModel model = getGenerativeModel("gemini-1.5-flash-001");
+        GenerativeModel model = getGenerativeModel(FunctionSupport.GEMINI_MODEL);
         String systemPrompt = "You are the Gardener's Assistant. You will be given a list of a user's memories and associated emotions from the past week. " +
                 "Your task is to create a 'memory bouquet' (emlék-csokor). " +
                 "This should be a short, poetic, and uplifting summary of the week's highlights and feelings. " +
@@ -228,7 +195,7 @@ public class AnalyzeMemories implements HttpFunction {
                 .map(m -> "Memory: " + m.userText() + "\nEmotions: " + gson.toJson(m.emotions()))
                 .collect(Collectors.joining("\n---\n"));
 
-        GenerativeModel model = getGenerativeModel("gemini-1.5-flash-001");
+        GenerativeModel model = getGenerativeModel(FunctionSupport.GEMINI_MODEL);
         String systemPrompt = "You are the Gardener's Assistant, a reflective and insightful AI. " +
                 "You will be given a list of a user's memories and their associated emotions from the past month. " +
                 "Your task is to identify deep, overarching patterns, shifts in emotion, or recurring themes that might not be obvious week-to-week. " +
@@ -260,7 +227,7 @@ public class AnalyzeMemories implements HttpFunction {
 
     List<MemoryData> getRecentMemoriesForUser(String userId) throws ExecutionException, InterruptedException {
         CollectionReference memoriesCollection = db.collection("memories");
-        long sevenDaysAgo = System.currentTimeMillis() - (7 * 24 * 60 * 60 * 1000);
+        long sevenDaysAgo = System.currentTimeMillis() - (7L * 24 * 60 * 60 * 1000);
         Query query = memoriesCollection
                 .whereEqualTo("userId", userId)
                 .whereGreaterThanOrEqualTo("timestamp", sevenDaysAgo);
@@ -268,6 +235,7 @@ public class AnalyzeMemories implements HttpFunction {
         List<com.google.cloud.firestore.QueryDocumentSnapshot> documents = query.get().get().getDocuments();
         return documents.stream()
                 .map(doc -> doc.toObject(MemoryData.class))
+                .filter(java.util.Objects::nonNull)
                 .collect(Collectors.toList());
     }
 
@@ -281,6 +249,7 @@ public class AnalyzeMemories implements HttpFunction {
         List<com.google.cloud.firestore.QueryDocumentSnapshot> documents = query.get().get().getDocuments();
         return documents.stream()
                 .map(doc -> doc.toObject(MemoryData.class))
+                .filter(java.util.Objects::nonNull)
                 .collect(Collectors.toList());
     }
 
