@@ -34,9 +34,6 @@ public class GetAtmosphere implements HttpFunction {
     private static final Logger logger = Logger.getLogger(GetAtmosphere.class.getName());
     private static final Gson gson = new Gson();
 
-    private static final String PROJECT_ID = FunctionSupport.PROJECT_ID;
-    private static final String REGION = FunctionSupport.REGION;
-
     private static final Set<String> POSITIVE_EMOTIONS = Set.of(
         "joy", "happiness", "gratitude", "love", "excitement", "contentment", "hope",
         "pride", "delight", "amusement", "awe", "wonder", "optimism", "affection", "elation");
@@ -61,7 +58,7 @@ public class GetAtmosphere implements HttpFunction {
     }
 
     public GetAtmosphere() throws IOException {
-        this(FirestoreOptions.getDefaultInstance().getService(), new VertexAI(PROJECT_ID, REGION), FirebaseAuth.getInstance());
+        this(FirestoreOptions.getDefaultInstance().getService(), FunctionSupport.vertexAI(), FirebaseAuth.getInstance());
     }
 
     // Constructor for testing

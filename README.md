@@ -13,7 +13,7 @@ In a fast-paced digital world, Cziczere offers a space for quiet reflection. The
 
 -   **AI-Enhanced Memory Input**: A Large Language Model (LLM) analyzes user's memories to identify key themes, sentiments, and generate a creative prompt for image generation.
     
--   **Generative Visuals**: Each memory is rendered by Google's Imagen model into a unique visual element, which is then stored in Google Cloud Storage.
+-   **Generative Visuals**: Each memory is rendered by Google's image generation model into a unique visual element, which is then stored in Google Cloud Storage.
     
 -   **Secure Authentication**: User authentication is handled by Firebase Authentication, ensuring that each user's garden is private and secure.
 
@@ -39,98 +39,52 @@ This project is built on a fully serverless, cost-optimized architecture using t
 | **Database**      | [Cloud Firestore](https://firebase.google.com/docs/firestore)                                            | Real-time NoSQL database for storing memories, prompts, emotions, and image URLs.                 |
 | **Authentication**| [Firebase Authentication](https://firebase.google.com/docs/auth)                                         | Secure, managed user authentication via Firebase ID tokens.                                       |
 | **Image Storage** | [Google Cloud Storage](https://cloud.google.com/storage)                                                 | Stores the generated images and provides public URLs for access.                                  |
-| **AI Services**   | [Google Vertex AI](https://cloud.google.com/vertex-ai)                                                   | - **Gemini 1.5 Flash:** Text analysis and image prompt generation.<br>- **Imagen:** Generative image creation. |
+| **AI Services**   | [Google Vertex AI](https://cloud.google.com/vertex-ai)                                                   | Gemini models for text analysis and image generation. |
 
-## 🚀 Getting Started
+## Run Cziczere on your computer
 
-Follow these instructions to get the project running on your local machine for development and testing purposes.
-### Prerequisites
+Download and extract the [source ZIP](https://github.com/aporkolab/cziczere/archive/refs/heads/main.zip), or clone the repo. Install Python 3.8+ and start Docker Desktop or Docker Engine with Compose 2.17 or newer. Docker builds the Angular UI and the Java API. Your own Firebase and Google Cloud project handles sign-in, data storage and AI requests, which can incur charges.
 
-Ensure you have the following tools installed on your system:
+In the extracted folder, double-click **Start-Cziczere.cmd** on Windows or **Start-Cziczere.command** on macOS. The launcher opens your browser when the services are ready. You can also start Cziczere from a terminal.
 
- - Node.js (v18 or later) & npm
- - Angular CLI: `npm install -g @angular/cli`
- - Java JDK (v17 or later) & Maven
- - Google Cloud SDK (gcloud)
- - Firebase CLI: `npm install -g firebase-tools`
+| macOS or Linux | Windows |
+| --- | --- |
+| `python3 start.py` | `py -3 start.py` |
 
-**Important:** After cloning the repository, run `npm install` in the `frontend` directory to install all required dependencies, including THREE.js for 3D rendering and AR functionality.
+On first launch, enter your **Firebase project ID**. The launcher looks up the public web configuration through Firebase Hosting. If it is unavailable, copy the five requested values from **Project settings → General → Your apps** into the terminal. You can also supply a web SDK JSON file. The launcher finds existing Google application credentials through `GOOGLE_APPLICATION_CREDENTIALS` or the standard gcloud ADC location. Otherwise it asks for the file path.
 
-### Setup and Installation
+Once the containers are ready, open [http://localhost:4200](http://localhost:4200), sign in with Google and select **Plant a Memory**. The first build downloads dependencies and can take several minutes. Scheduled reminders and push notifications are outside this local setup.
 
-    Clone the Repository
+### Prepare a new cloud project once
 
-    git clone https://github.com/aporkolab/cziczere.git
-    cd cziczere
+1. Create a **dedicated** Firebase project, link a billing account and register a web app under **Project settings → General**. In **Authentication**, enable the Google sign-in provider and add `localhost` under **Settings → Authorized domains**. [Firebase sign-in setup](https://firebase.google.com/docs/auth/web/google-signin)
+2. Create the **(default)** Firestore database in Native mode. Publish the included `firestore.rules` and create the three collection indexes in `firestore.indexes.json`. With the Firebase CLI, run `firebase deploy --only firestore --project YOUR_PROJECT_ID` from the repo root. This publishes rules and indexes to the named project. Wait for the indexes to finish building. [Firestore index setup](https://firebase.google.com/docs/firestore/query-data/indexing)
+3. Enable the **Vertex AI** and **Cloud Text-to-Speech** APIs. In Firebase **Storage**, create the default bucket and keep its access restricted. The local app uploads new images and audio to this bucket and issues a download link for each object (`FIREBASE_MEDIA_LINKS=true` in Compose). Anyone with a link can read that file. If you choose separate buckets, connect them to Firebase Storage in the same project. [Cloud Storage for Firebase setup](https://firebase.google.com/docs/storage/web/start)
+4. Give the backend identity access to Vertex AI, Firestore reads/writes, the media buckets' objects and the project's enabled APIs. For example, use Vertex AI User, Cloud Datastore User and Service Usage Consumer on the project and Storage Object User on the media buckets. Use a local Google application-default credentials (ADC) file or a service-account JSON file that Docker can read. For user ADC, run `gcloud auth application-default login` and `gcloud auth application-default set-quota-project YOUR_PROJECT_ID`. [Google Cloud local credentials](https://cloud.google.com/docs/authentication/set-up-adc-local-dev-environment)
 
-Google Cloud & Firebase Setup
+To get the web SDK JSON without Firebase Hosting, export it with the Firebase CLI (replace the web app ID and project ID with your own).
 
- - Create a new project on the Google Cloud Console.
- - Create a new Firebase project and link it to your Google Cloud
-   project.
-   
-   
- - Enable the following APIs in your GCP project: Vertex AI API, Cloud
-   Functions API, Cloud Build API.
-   
- - Crucially, set up a billing alert in the GCP console to avoid
-   unexpected charges. A $5 alert is recommended to start.
+```sh
+firebase apps:sdkconfig WEB YOUR_WEB_APP_ID --project YOUR_PROJECT_ID --json > firebase-web.json
+```
 
-Backend Setup (Cloud Functions)
+Alternatively, save the six public SDK settings from **Project settings → General → Your apps** as a UTF-8 JSON object containing these string fields — `projectId`, `apiKey`, `authDomain`, `appId`, `messagingSenderId` and `storageBucket`.
 
-    cd functions
+### Restart, update or change settings
 
-   Authenticate with Google Cloud:
+Run the same launcher again to restart. To update a clone, run `git pull` first, then run the launcher to rebuild. From the project directory, `docker compose logs -f` shows both services and `docker compose down` stops them. Your garden stays in your cloud project.
 
-    gcloud auth application-default login
+To change projects or credentials, pass the new values explicitly. Either option can be used on its own.
 
-Create a .env.local file for local environment variables. See .env.example for the required variables:
+```sh
+python3 start.py --firebase ./firebase-web.json --credentials "/path/to/google-credentials.json"
+```
 
-        GCP_PROJECT_ID="your-gcp-project-id"
-        GCP_REGION="your-gcp-region" # e.g., us-central1
+`--firebase` also accepts a project ID. The launcher saves the public Firebase settings and credential file path under `.cziczere/`. The backend reads the original credential file from a read-only mount.
 
-        Install Java dependencies:
+Set environment variables before launching to override `CZ_PORT` (default `4200`), `GCS_BUCKET_NAME` for images or `INSIGHT_AUDIO_BUCKET` for audio. The local defaults for `GCP_REGION`, `GEMINI_MODEL` and `IMAGEN_MODEL` are `global`, `gemini-3.1-flash-lite` and `gemini-3.1-flash-image`, respectively. Choose a location supported by both selected models. [Google model availability](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions)
 
-        mvn install
-
-Frontend Setup (Angular)
-
-    cd ../frontend # from the root directory
-    npm install
-
-    Follow the on-screen instructions to set up your Firebase web configuration in src/environments/environment.ts.
-
-### Running the Application Locally
-
-For local development, we will use the Firebase Local Emulator Suite.
-
-Start the Backend Emulators
-From the project's root directory, start the emulators for Functions and Firestore:
-
-    firebase emulators:start --only functions,firestore
-
-This will start a local server for your Cloud Functions and a local Firestore database.
-
-Start the Frontend Development Server
-In a separate terminal, from the frontend directory:
-
-    ng serve
-
-Navigate to http://localhost:4200/. The application will automatically connect to your local emulators.
-
-## ☁️ Deployment
-
-To deploy the application to your live Firebase project:
-
-Build the Angular Application
-
-    cd frontend
-    ng build --configuration production
-
-Deploy to Firebase
-From the project's root directory, deploy the hosting, functions, and Firestore rules:
-
-    firebase deploy --only hosting,functions,firestore
+For hosted deployments, see the [production deployment notes](PRODUCTION_DEPLOYMENT.md).
 
 ## 🤝 Contributing
 

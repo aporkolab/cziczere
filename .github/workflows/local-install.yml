@@ -1,0 +1,39 @@
+name: Local installation
+on:
+  pull_request:
+    paths:
+      - 'compose.yaml'
+      - 'start.py'
+      - 'functions/**'
+      - 'frontend/**'
+      - '.github/workflows/local-install.yml'
+permissions:
+  contents: read
+jobs:
+  install:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - name: Start the garden with test credentials
+        run: |
+          cat > "$RUNNER_TEMP/web.json" <<'JSON'
+          {"apiKey":"fake-api-key","appId":"1:123:web:abc","projectId":"demo-garden","authDomain":"demo-garden.firebaseapp.com","storageBucket":"demo-garden.appspot.com","messagingSenderId":"123"}
+          JSON
+          cat > "$RUNNER_TEMP/adc.json" <<'JSON'
+          {"type":"authorized_user","client_id":"test","client_secret":"test","refresh_token":"test"}
+          JSON
+          chmod 600 "$RUNNER_TEMP/adc.json"
+          python3 start.py --firebase "$RUNNER_TEMP/web.json" --credentials "$RUNNER_TEMP/adc.json"
+      - name: Verify the UI, configuration and protected API
+        run: |
+          curl --fail --silent http://localhost:4200/healthz
+          curl --fail --silent http://localhost:4200/firebase-config.json | jq -e '.projectId == "demo-garden" and (has("refresh_token") | not)'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:4200/api/getAtmosphere)" = 401
+          google-chrome --headless --disable-gpu --no-sandbox --virtual-time-budget=10000 \
+            --dump-dom http://localhost:4200 > "$RUNNER_TEMP/garden.html"
+          grep -F 'Login with Google' "$RUNNER_TEMP/garden.html"
+      - if: failure()
+        run: docker compose logs
+      - if: always()
+        run: docker compose down

@@ -91,11 +91,9 @@ public class GetInsightAudio implements HttpFunction {
                 String blobName = insightId + ".mp3";
                 BlobId blobId = BlobId.of(BUCKET_NAME, blobName);
                 BlobInfo blobInfo = BlobInfo.newBuilder(blobId).setContentType("audio/mpeg").build();
-                storage.create(blobInfo, audioBytes);
-
-                String publicUrl = "https://storage.googleapis.com/" + BUCKET_NAME + "/" + blobName;
+                String audioUrl = MediaStorage.upload(storage, blobInfo, audioBytes);
                 response.setStatusCode(200);
-                writer.write(gson.toJson(Collections.singletonMap("audioUrl", publicUrl)));
+                writer.write(gson.toJson(Collections.singletonMap("audioUrl", audioUrl)));
             } catch (FunctionSupport.AuthException e) {
                 logger.warning("Authentication failed: " + e.getMessage());
                 response.setStatusCode(401, "Unauthorized");
