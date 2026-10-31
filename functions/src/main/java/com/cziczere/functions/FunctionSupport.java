@@ -2,6 +2,7 @@ package com.cziczere.functions;
 
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.functions.HttpRequest;
+import com.google.cloud.vertexai.VertexAI;
 import com.google.cloud.functions.HttpResponse;
 import com.google.firebase.FirebaseApp;
 import com.google.firebase.FirebaseOptions;
@@ -31,14 +32,26 @@ final class FunctionSupport {
 
     static final String PROJECT_ID = env("GCP_PROJECT_ID", "your-gcp-project-id");
     static final String REGION = env("GCP_REGION", "us-central1");
-    /** Gemini model used for text analysis; the 1.5 generation has been retired by Vertex AI. */
     static final String GEMINI_MODEL = env("GEMINI_MODEL", "gemini-2.5-flash");
-    /** Imagen model used for memory images. */
+    /** Image publisher model: Compose uses Gemini; older deployments can continue to select Imagen. */
     static final String IMAGEN_MODEL = env("IMAGEN_MODEL", "imagen-3.0-generate-002");
     /** Comma-separated CORS allowlist, e.g. {@code https://cziczere-ai.web.app}. */
     static final Set<String> ALLOWED_ORIGINS = parseOrigins(System.getenv("ALLOWED_ORIGINS"));
 
     private FunctionSupport() {
+    }
+
+    static String vertexHost(String location) {
+        return switch (location) {
+            case "global" -> "aiplatform.googleapis.com";
+            case "us", "eu" -> "aiplatform." + location + ".rep.googleapis.com";
+            default -> location + "-aiplatform.googleapis.com";
+        };
+    }
+
+    static VertexAI vertexAI() {
+        return new VertexAI.Builder().setProjectId(PROJECT_ID).setLocation(REGION)
+            .setApiEndpoint(vertexHost(REGION)).build();
     }
 
     static String env(String name, String defaultValue) {

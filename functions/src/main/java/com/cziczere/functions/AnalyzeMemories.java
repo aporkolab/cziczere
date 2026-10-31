@@ -28,9 +28,6 @@ public class AnalyzeMemories implements HttpFunction {
     private static final Logger logger = Logger.getLogger(AnalyzeMemories.class.getName());
     private static final Gson gson = new Gson();
 
-    private static final String PROJECT_ID = FunctionSupport.PROJECT_ID;
-    private static final String REGION = FunctionSupport.REGION;
-
     Firestore db;
     VertexAI vertexAI;
     FirebaseAuth firebaseAuth;
@@ -41,7 +38,7 @@ public class AnalyzeMemories implements HttpFunction {
 
     public AnalyzeMemories() throws IOException {
         this.db = FirestoreOptions.getDefaultInstance().getService();
-        this.vertexAI = new VertexAI(PROJECT_ID, REGION);
+        this.vertexAI = FunctionSupport.vertexAI();
         this.firebaseAuth = FirebaseAuth.getInstance();
     }
 

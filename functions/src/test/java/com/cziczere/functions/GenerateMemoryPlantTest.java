@@ -93,7 +93,7 @@ class GenerateMemoryPlantTest {
         GenerateMemoryPlant.GeminiResponse fakeGeminiResponse = new GenerateMemoryPlant.GeminiResponse("a painting of a beautiful day", null);
 
         doReturn(fakeGeminiResponse).when(spyFunction).generateAnalysisWithGemini(anyString());
-        doReturn("http://fake.url/image.png").when(spyFunction).generateImageWithImagen(anyString());
+        doReturn("http://fake.url/image.png").when(spyFunction).generateImage(anyString());
         doNothing().when(spyFunction).saveToFirestore(any());
 
         // When
@@ -119,7 +119,7 @@ class GenerateMemoryPlantTest {
         GenerateMemoryPlant spyFunction = spy(function);
 
         doThrow(new IOException("Gemini is down")).when(spyFunction).generateAnalysisWithGemini(anyString());
-        doReturn("http://fake.url/image.png").when(spyFunction).generateImageWithImagen(anyString());
+        doReturn("http://fake.url/image.png").when(spyFunction).generateImage(anyString());
         doNothing().when(spyFunction).saveToFirestore(any());
 
         // When

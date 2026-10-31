@@ -13,6 +13,7 @@ import { ArViewComponent } from './ar-view/ar-view.component';
 import { ApiService, InsightData, MemoryData } from './api.service';
 import { ArStateService } from './ar-state.service';
 import { NotificationService } from './notification.service';
+import { environment } from '../environments/environment';
 
 @Component({
   selector: 'app-root',
@@ -55,10 +56,12 @@ export class AppComponent implements OnInit {
 
   login() {
     signInWithPopup(this.auth, new GoogleAuthProvider()).then(result => {
-      this.notificationService.requestPermission();
-      this.notificationService.listenForMessages();
-      const userDoc = doc(this.firestore, `users/${result.user.uid}`);
-      setDoc(userDoc, { lastActive: Date.now() }, { merge: true });
+      if (environment.features.enableNotifications) {
+        this.notificationService.requestPermission();
+        this.notificationService.listenForMessages();
+        const userDoc = doc(this.firestore, `users/${result.user.uid}`);
+        setDoc(userDoc, { lastActive: Date.now() }, { merge: true });
+      }
     });
   }
 
@@ -80,7 +83,7 @@ export class AppComponent implements OnInit {
         this.showMemoryForm = false; // Hide form after successful submission
         // Also update the user's last active timestamp
         const user = this.auth.currentUser;
-        if (user) {
+        if (user && environment.features.enableNotifications) {
           const userDoc = doc(this.firestore, `users/${user.uid}`);
           setDoc(userDoc, { lastActive: newMemory.timestamp }, { merge: true });
         }
