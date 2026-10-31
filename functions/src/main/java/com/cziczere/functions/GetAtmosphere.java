@@ -1,6 +1,5 @@
 package com.cziczere.functions;
 
-import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.firestore.CollectionReference;
 import com.google.cloud.firestore.Firestore;
 import com.google.cloud.firestore.FirestoreOptions;
@@ -11,23 +10,23 @@ import com.google.cloud.functions.HttpResponse;
 import com.google.cloud.vertexai.VertexAI;
 import com.google.cloud.vertexai.api.GenerateContentResponse;
 import com.google.cloud.vertexai.generativeai.GenerativeModel;
-import com.google.firebase.FirebaseApp;
-import com.google.firebase.FirebaseOptions;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseAuthException;
-import com.google.firebase.auth.FirebaseToken;
 import com.google.gson.Gson;
-import com.google.gson.JsonSyntaxException;
 
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class GetAtmosphere implements HttpFunction {
@@ -35,52 +34,48 @@ public class GetAtmosphere implements HttpFunction {
     private static final Logger logger = Logger.getLogger(GetAtmosphere.class.getName());
     private static final Gson gson = new Gson();
 
-    private static final String PROJECT_ID = System.getenv().getOrDefault("GCP_PROJECT_ID", "your-gcp-project-id");
-    private static final String REGION = System.getenv().getOrDefault("GCP_REGION", "us-central1");
+    private static final String PROJECT_ID = FunctionSupport.PROJECT_ID;
+    private static final String REGION = FunctionSupport.REGION;
+
+    private static final Set<String> POSITIVE_EMOTIONS = Set.of(
+        "joy", "happiness", "gratitude", "love", "excitement", "contentment", "hope",
+        "pride", "delight", "amusement", "awe", "wonder", "optimism", "affection", "elation");
+    private static final Set<String> NEGATIVE_EMOTIONS = Set.of(
+        "sadness", "grief", "anger", "fear", "anxiety", "loneliness", "regret", "frustration",
+        "disappointment", "shame", "guilt", "stress", "melancholy", "sorrow", "despair");
+    private static final Set<String> CALM_EMOTIONS = Set.of(
+        "calm", "peace", "serenity", "tranquility", "relaxation", "nostalgia", "reflection");
+    private static final Set<String> WEATHER_TYPES = Set.of("Clear", "Sunny", "Rainy", "Snowy", "Foggy", "Stormy");
+    private static final Pattern HEX_COLOR = Pattern.compile("^#[0-9a-fA-F]{6}$");
+    private static final AtmosphereData FALLBACK_ATMOSPHERE = new AtmosphereData("Clear", "#DDDDDD", "sounds/calm.mp3");
 
     Firestore db;
     VertexAI vertexAI;
+    FirebaseAuth firebaseAuth;
 
     // Simple record for the response
     public record AtmosphereData(String weather, String backgroundColor, String soundUrl) {}
 
     static {
-        // Static initializer for Firebase Admin SDK
-        try {
-            if (FirebaseApp.getApps().isEmpty()) {
-                GoogleCredentials credentials = GoogleCredentials.getApplicationDefault();
-                FirebaseOptions options = FirebaseOptions.builder()
-                    .setCredentials(credentials)
-                    .setProjectId(PROJECT_ID)
-                    .build();
-                FirebaseApp.initializeApp(options);
-                logger.info("Firebase Admin SDK initialized successfully for GetAtmosphere.");
-            }
-        } catch (IOException e) {
-            logger.log(Level.SEVERE, "Firebase Admin SDK initialization failed.", e);
-        }
+        FunctionSupport.initFirebase();
     }
 
     public GetAtmosphere() throws IOException {
-        this.db = FirestoreOptions.getDefaultInstance().getService();
-        this.vertexAI = new VertexAI(PROJECT_ID, REGION);
+        this(FirestoreOptions.getDefaultInstance().getService(), new VertexAI(PROJECT_ID, REGION), FirebaseAuth.getInstance());
     }
 
     // Constructor for testing
-    GetAtmosphere(Firestore db, VertexAI vertexAI) {
+    GetAtmosphere(Firestore db, VertexAI vertexAI, FirebaseAuth firebaseAuth) {
         this.db = db;
         this.vertexAI = vertexAI;
-    }
-
-    // Custom exception for auth errors
-    static class AuthException extends Exception {
-        public AuthException(String message) {
-            super(message);
-        }
+        this.firebaseAuth = firebaseAuth;
     }
 
     @Override
     public void service(HttpRequest request, HttpResponse response) throws Exception {
+        if (FunctionSupport.handleCors(request, response, "POST, GET")) {
+            return;
+        }
         response.appendHeader("Content-Type", "application/json");
 
         try (BufferedWriter writer = response.getWriter()) {
@@ -109,10 +104,10 @@ public class GetAtmosphere implements HttpFunction {
                 response.setStatusCode(200, "OK");
                 writer.write(gson.toJson(finalAtmosphere));
 
-            } catch (AuthException e) {
+            } catch (FunctionSupport.AuthException e) {
                 logger.warning("Authentication failed: " + e.getMessage());
                 response.setStatusCode(401, "Unauthorized");
-                writer.write("{\"error\":\"" + e.getMessage() + "\"}");
+                writer.write(FunctionSupport.errorJson(e.getMessage()));
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Internal Server Error", e);
                 response.setStatusCode(500, "Internal Server Error.");
@@ -121,19 +116,8 @@ public class GetAtmosphere implements HttpFunction {
         }
     }
 
-    String getUserIdFromAuthToken(HttpRequest request) throws AuthException {
-        Optional<String> authHeader = request.getFirstHeader("Authorization");
-        if (authHeader.isEmpty() || !authHeader.get().startsWith("Bearer ")) {
-            throw new AuthException("Authorization header is missing or not Bearer type.");
-        }
-
-        String idToken = authHeader.get().substring(7);
-        try {
-            FirebaseToken decodedToken = FirebaseAuth.getInstance().verifyIdToken(idToken);
-            return decodedToken.getUid();
-        } catch (FirebaseAuthException e) {
-            throw new AuthException("Invalid Firebase ID token: " + e.getMessage());
-        }
+    String getUserIdFromAuthToken(HttpRequest request) throws FunctionSupport.AuthException {
+        return FunctionSupport.requireUserId(request, firebaseAuth);
     }
 
     List<MemoryData> getRecentMemoriesForUser(String userId) throws ExecutionException, InterruptedException {
@@ -150,6 +134,7 @@ public class GetAtmosphere implements HttpFunction {
 
         return documents.stream()
                 .map(doc -> doc.toObject(MemoryData.class))
+                .filter(Objects::nonNull)
                 .collect(Collectors.toList());
     }
 
@@ -159,7 +144,7 @@ public class GetAtmosphere implements HttpFunction {
                 .map(MemoryData::userText)
                 .collect(Collectors.joining("\n---\n"));
 
-        GenerativeModel model = getGenerativeModel("gemini-1.5-flash-001");
+        GenerativeModel model = getGenerativeModel(FunctionSupport.GEMINI_MODEL);
         String systemPrompt = "You are an AI that determines the atmosphere of a digital garden based on a user's recent memories. " +
                 "Analyze the overall sentiment and themes from the memories provided. " +
                 "Based on your analysis, you must choose ONE weather condition from this list: [Clear, Sunny, Rainy, Snowy, Foggy, Stormy]. " +
@@ -175,45 +160,63 @@ public class GetAtmosphere implements HttpFunction {
             GenerateContentResponse response = model.generateContent(fullPrompt);
             String rawResponse = response.getCandidates(0).getContent().getParts(0).getText();
 
-            // Clean up the response to ensure it's valid JSON
-            String jsonResponse = rawResponse.trim().replace("```json", "").replace("```", "").trim();
-
-            logger.info("Generated atmosphere JSON: " + jsonResponse);
-            AtmosphereData data = gson.fromJson(jsonResponse, AtmosphereData.class);
+            AtmosphereData data = FunctionSupport.extractJsonObject(rawResponse)
+                .map(json -> gson.fromJson(json, AtmosphereData.class))
+                .orElse(null);
+            if (data == null || data.weather() == null || !WEATHER_TYPES.contains(data.weather())
+                || data.backgroundColor() == null || !HEX_COLOR.matcher(data.backgroundColor()).matches()) {
+                logger.warning("Gemini returned an invalid atmosphere, using fallback: " + rawResponse);
+                return FALLBACK_ATMOSPHERE;
+            }
             return new AtmosphereData(data.weather(), data.backgroundColor(), ""); // soundUrl is handled separately
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Error generating or parsing atmosphere with Gemini: " + e.getMessage(), e);
-            // Provide a fallback/default atmosphere on error
-            return new AtmosphereData("Clear", "#DDDDDD", "sounds/calm.mp3"); // Light grey as a fallback
+            return FALLBACK_ATMOSPHERE;
         }
     }
 
-    private String selectSoundForMood(List<MemoryData> memories) {
-        double totalScore = 0;
+    /**
+     * Picks a soundscape from the emotion analysis. Scores are intensities in [0, 1], so the
+     * mood comes from the emotion names: positive minus negative intensity, averaged.
+     */
+    static String selectSoundForMood(List<MemoryData> memories) {
+        double valence = 0;
+        double calmness = 0;
         int emotionCount = 0;
 
         for (MemoryData memory : memories) {
-            if (memory.emotions() != null) {
-                for (double score : memory.emotions().values()) {
-                    totalScore += score;
-                    emotionCount++;
+            if (memory.emotions() == null) {
+                continue;
+            }
+            for (Map.Entry<String, Double> emotion : memory.emotions().entrySet()) {
+                if (emotion.getKey() == null || emotion.getValue() == null) {
+                    continue;
                 }
+                String name = emotion.getKey().toLowerCase(Locale.ROOT);
+                if (POSITIVE_EMOTIONS.contains(name)) {
+                    valence += emotion.getValue();
+                } else if (NEGATIVE_EMOTIONS.contains(name)) {
+                    valence -= emotion.getValue();
+                } else if (CALM_EMOTIONS.contains(name)) {
+                    calmness += emotion.getValue();
+                }
+                emotionCount++;
             }
         }
 
         if (emotionCount == 0) {
-            return "sounds/neutral.mp3"; // Default sound
-        }
-
-        double averageScore = totalScore / emotionCount;
-
-        if (averageScore > 0.5) {
-            return "sounds/happy.mp3";
-        } else if (averageScore < -0.5) {
-            return "sounds/sad.mp3";
-        } else {
             return "sounds/neutral.mp3";
         }
+
+        double averageValence = valence / emotionCount;
+        if (averageValence > 0.25) {
+            return "sounds/happy.mp3";
+        } else if (averageValence < -0.25) {
+            return "sounds/sad.mp3";
+        } else if (calmness / emotionCount > 0.25) {
+            return "sounds/calm.mp3";
+        }
+        return "sounds/neutral.mp3";
     }
 
     protected GenerativeModel getGenerativeModel(String modelName) {

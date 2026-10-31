@@ -1,17 +1,12 @@
 package com.cziczere.functions;
 
-import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.functions.HttpFunction;
 import com.google.cloud.functions.HttpRequest;
 import com.google.cloud.functions.HttpResponse;
 import com.google.cloud.vertexai.VertexAI;
 import com.google.cloud.vertexai.api.GenerateContentResponse;
 import com.google.cloud.vertexai.generativeai.GenerativeModel;
-import com.google.firebase.FirebaseApp;
-import com.google.firebase.FirebaseOptions;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseAuthException;
-import com.google.firebase.auth.FirebaseToken;
 import com.google.gson.Gson;
 
 import java.io.BufferedWriter;
@@ -29,31 +24,22 @@ public class PoeticRephrasing implements HttpFunction {
     private static final Logger logger = Logger.getLogger(PoeticRephrasing.class.getName());
     private static final Gson gson = new Gson();
 
-    private static final String PROJECT_ID = System.getenv().getOrDefault("GCP_PROJECT_ID", "your-gcp-project-id");
-    private static final String REGION = System.getenv().getOrDefault("GCP_REGION", "us-central1");
+    private static final String PROJECT_ID = FunctionSupport.PROJECT_ID;
+    private static final String REGION = FunctionSupport.REGION;
 
     private final VertexAI vertexAI;
     private final FirebaseAuth firebaseAuth;
+
+    GenerativeModel getGenerativeModel() {
+        return new GenerativeModel(FunctionSupport.GEMINI_MODEL, vertexAI);
+    }
 
     // Request/Response data classes
     record RephrasingRequest(String originalText) {}
     record RephrasingResponse(String poeticVersion, String suggestion) {}
 
-    // Static initializer for Firebase Admin SDK
     static {
-        try {
-            if (FirebaseApp.getApps().isEmpty()) {
-                GoogleCredentials credentials = GoogleCredentials.getApplicationDefault();
-                FirebaseOptions options = FirebaseOptions.builder()
-                    .setCredentials(credentials)
-                    .setProjectId(PROJECT_ID)
-                    .build();
-                FirebaseApp.initializeApp(options);
-                logger.info("Firebase Admin SDK initialized successfully.");
-            }
-        } catch (IOException e) {
-            logger.log(Level.SEVERE, "Firebase Admin SDK initialization failed.", e);
-        }
+        FunctionSupport.initFirebase();
     }
 
     public PoeticRephrasing() throws IOException {
@@ -69,16 +55,10 @@ public class PoeticRephrasing implements HttpFunction {
 
     @Override
     public void service(HttpRequest request, HttpResponse response) throws Exception {
-        response.appendHeader("Content-Type", "application/json");
-        response.appendHeader("Access-Control-Allow-Origin", "*");
-        response.appendHeader("Access-Control-Allow-Methods", "POST");
-        response.appendHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
-
-        if ("OPTIONS".equals(request.getMethod())) {
-            response.setStatusCode(200);
+        if (FunctionSupport.handleCors(request, response, "POST")) {
             return;
         }
-
+        response.appendHeader("Content-Type", "application/json");
         try (BufferedWriter writer = response.getWriter()) {
             try {
                 // Authenticate user
@@ -98,10 +78,10 @@ public class PoeticRephrasing implements HttpFunction {
                 response.setStatusCode(200, "OK");
                 writer.write(gson.toJson(result));
 
-            } catch (AuthException e) {
+            } catch (FunctionSupport.AuthException e) {
                 logger.warning("Authentication failed: " + e.getMessage());
                 response.setStatusCode(401, "Unauthorized");
-                writer.write("{\"error\":\"" + e.getMessage() + "\"}");
+                writer.write(FunctionSupport.errorJson(e.getMessage()));
             } catch (Exception e) {
                 logger.log(Level.SEVERE, "Internal Server Error", e);
                 response.setStatusCode(500, "Internal Server Error");
@@ -110,23 +90,12 @@ public class PoeticRephrasing implements HttpFunction {
         }
     }
 
-    private String getUserIdFromAuthToken(HttpRequest request) throws AuthException {
-        Optional<String> authHeader = request.getFirstHeader("Authorization");
-        if (authHeader.isEmpty() || !authHeader.get().startsWith("Bearer ")) {
-            throw new AuthException("Authorization header is missing or not Bearer type.");
-        }
-
-        String idToken = authHeader.get().substring(7);
-        try {
-            FirebaseToken decodedToken = this.firebaseAuth.verifyIdToken(idToken);
-            return decodedToken.getUid();
-        } catch (FirebaseAuthException e) {
-            throw new AuthException("Invalid Firebase ID token: " + e.getMessage());
-        }
+    private String getUserIdFromAuthToken(HttpRequest request) throws FunctionSupport.AuthException {
+        return FunctionSupport.requireUserId(request, firebaseAuth);
     }
 
-    private RephrasingResponse generatePoeticRephrasing(String originalText) throws IOException {
-        GenerativeModel model = new GenerativeModel("gemini-1.5-flash-001", vertexAI);
+    RephrasingResponse generatePoeticRephrasing(String originalText) {
+        GenerativeModel model = getGenerativeModel();
         
         String systemPrompt = "You are a creative writing assistant specializing in transforming everyday memories into beautiful, poetic expressions. " +
             "Your task is to take the user's memory and create a more artistic, lyrical version that captures the same essence but with enhanced imagery and emotion. " +
@@ -142,34 +111,21 @@ public class PoeticRephrasing implements HttpFunction {
             GenerateContentResponse response = model.generateContent(fullPrompt);
             String responseText = response.getCandidates(0).getContent().getParts(0).getText();
 
-            // Clean up the response to extract JSON
-            String jsonResponse = responseText.trim();
-            if (!jsonResponse.startsWith("{")) {
-                // Try to extract JSON from response
-                int jsonStart = jsonResponse.indexOf("{");
-                int jsonEnd = jsonResponse.lastIndexOf("}") + 1;
-                if (jsonStart >= 0 && jsonEnd > jsonStart) {
-                    jsonResponse = jsonResponse.substring(jsonStart, jsonEnd);
-                }
+            RephrasingResponse result = FunctionSupport.extractJsonObject(responseText)
+                .map(json -> gson.fromJson(json, RephrasingResponse.class))
+                .filter(r -> r.poeticVersion() != null && !r.poeticVersion().isBlank())
+                .orElse(null);
+            if (result != null) {
+                return result;
             }
-
-            logger.info("Generated poetic rephrasing response: " + jsonResponse);
-            return gson.fromJson(jsonResponse, RephrasingResponse.class);
-
+            logger.warning("Gemini returned no usable poetic rephrasing, using fallback.");
         } catch (Exception e) {
-            logger.severe("Error generating poetic rephrasing: " + e.getMessage());
-            // Fallback response
-            return new RephrasingResponse(
-                "Your memory sparkles with its own unique beauty, waiting to unfold in the garden of your heart.",
-                "I encountered an issue, but your original memory is already meaningful as it is."
-            );
+            logger.log(Level.SEVERE, "Error generating poetic rephrasing: " + e.getMessage(), e);
         }
+        return new RephrasingResponse(
+            "Your memory sparkles with its own unique beauty, waiting to unfold in the garden of your heart.",
+            "I encountered an issue, but your original memory is already meaningful as it is."
+        );
     }
 
-    // Custom exception for auth errors
-    static class AuthException extends Exception {
-        public AuthException(String message) {
-            super(message);
-        }
-    }
 }

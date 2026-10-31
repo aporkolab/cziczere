@@ -10,11 +10,11 @@ import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.texttospeech.v1.*;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseToken;
 import com.google.gson.Gson;
 import com.google.protobuf.ByteString;
 
 import java.io.BufferedWriter;
+import java.util.Collections;
 import java.util.Optional;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -23,13 +23,17 @@ public class GetInsightAudio implements HttpFunction {
 
     private static final Logger logger = Logger.getLogger(GetInsightAudio.class.getName());
     private static final Gson gson = new Gson();
-    private static final String BUCKET_NAME = System.getenv().getOrDefault("GCP_PROJECT_ID", "your-gcp-project-id") + "-insight-audio";
+    private static final String BUCKET_NAME = FunctionSupport.env("INSIGHT_AUDIO_BUCKET", FunctionSupport.PROJECT_ID + "-insight-audio");
 
 
     private final Firestore db;
     private final Storage storage;
     private final FirebaseAuth firebaseAuth;
     private final TextToSpeechClientFactory textToSpeechClientFactory;
+
+    static {
+        FunctionSupport.initFirebase();
+    }
 
     public GetInsightAudio() throws Exception {
         // This constructor will be used by the Functions Framework
@@ -51,62 +55,56 @@ public class GetInsightAudio implements HttpFunction {
 
     @Override
     public void service(HttpRequest request, HttpResponse response) throws Exception {
-        response.appendHeader("Content-Type", "application/json");
-        response.appendHeader("Access-Control-Allow-Origin", "*"); // Basic CORS for development
-
-        if ("OPTIONS".equals(request.getMethod())) {
-            response.appendHeader("Access-Control-Allow-Methods", "GET");
-            response.appendHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
-            response.setStatusCode(204);
+        if (FunctionSupport.handleCors(request, response, "GET")) {
             return;
         }
+        response.appendHeader("Content-Type", "application/json");
 
         try (BufferedWriter writer = response.getWriter()) {
-            // 1. Authenticate user
-            getUserIdFromAuthToken(request);
+            try {
+                String userId = FunctionSupport.requireUserId(request, firebaseAuth);
 
-            // 2. Get insightId from request
-            Optional<String> insightIdOpt = request.getFirstQueryParameter("insightId");
-            if (insightIdOpt.isEmpty()) {
-                response.setStatusCode(400, "Bad Request");
-                writer.write("{\"error\":\"insightId parameter is missing.\"}");
-                return;
+                Optional<String> insightIdOpt = request.getFirstQueryParameter("insightId").filter(id -> !id.isBlank());
+                if (insightIdOpt.isEmpty()) {
+                    response.setStatusCode(400, "Bad Request");
+                    writer.write(FunctionSupport.errorJson("insightId parameter is missing."));
+                    return;
+                }
+                String insightId = insightIdOpt.get();
+
+                DocumentSnapshot insightDoc = db.collection("insights").document(insightId).get().get();
+                // Report foreign insights as missing so IDs of other users cannot be probed.
+                if (!insightDoc.exists() || !userId.equals(insightDoc.getString("userId"))) {
+                    response.setStatusCode(404, "Not Found");
+                    writer.write(FunctionSupport.errorJson("Insight not found."));
+                    return;
+                }
+                String textToSynthesize = insightDoc.getString("text");
+                if (textToSynthesize == null || textToSynthesize.isBlank()) {
+                    response.setStatusCode(400, "Bad Request");
+                    writer.write(FunctionSupport.errorJson("Insight has no text to synthesize."));
+                    return;
+                }
+
+                byte[] audioBytes = synthesizeText(textToSynthesize);
+
+                String blobName = insightId + ".mp3";
+                BlobId blobId = BlobId.of(BUCKET_NAME, blobName);
+                BlobInfo blobInfo = BlobInfo.newBuilder(blobId).setContentType("audio/mpeg").build();
+                storage.create(blobInfo, audioBytes);
+
+                String publicUrl = "https://storage.googleapis.com/" + BUCKET_NAME + "/" + blobName;
+                response.setStatusCode(200);
+                writer.write(gson.toJson(Collections.singletonMap("audioUrl", publicUrl)));
+            } catch (FunctionSupport.AuthException e) {
+                logger.warning("Authentication failed: " + e.getMessage());
+                response.setStatusCode(401, "Unauthorized");
+                writer.write(FunctionSupport.errorJson(e.getMessage()));
+            } catch (Exception e) {
+                logger.log(Level.SEVERE, "Internal Server Error in GetInsightAudio", e);
+                response.setStatusCode(500, "Internal Server Error");
+                writer.write(FunctionSupport.errorJson("An unexpected error occurred."));
             }
-            String insightId = insightIdOpt.get();
-
-            // 3. Fetch insight text from Firestore
-            DocumentSnapshot insightDoc = db.collection("insights").document(insightId).get().get();
-            if (!insightDoc.exists()) {
-                response.setStatusCode(404, "Not Found");
-                writer.write("{\"error\":\"Insight not found.\"}");
-                return;
-            }
-            String textToSynthesize = insightDoc.getString("text");
-            if (textToSynthesize == null || textToSynthesize.isEmpty()) {
-                 response.setStatusCode(400, "Bad Request");
-                writer.write("{\"error\":\"Insight has no text to synthesize.\"}");
-                return;
-            }
-
-            // 4. Synthesize speech
-            byte[] audioBytes = synthesizeText(textToSynthesize);
-
-            // 5. Save to Cloud Storage
-            String blobName = insightId + ".mp3";
-            BlobId blobId = BlobId.of(BUCKET_NAME, blobName);
-            BlobInfo blobInfo = BlobInfo.newBuilder(blobId).setContentType("audio/mpeg").build();
-            storage.create(blobInfo, audioBytes);
-
-            // 6. Return public URL
-            String publicUrl = "https://storage.googleapis.com/" + BUCKET_NAME + "/" + blobName;
-
-            writer.write(gson.toJson(java.util.Collections.singletonMap("audioUrl", publicUrl)));
-            response.setStatusCode(200);
-
-        } catch (Exception e) {
-            logger.log(Level.SEVERE, "Internal Server Error in GetInsightAudio", e);
-            response.setStatusCode(500, "Internal Server Error");
-            response.getWriter().write("{\"error\":\"An unexpected error occurred.\"}");
         }
     }
 
@@ -135,21 +133,6 @@ public class GetInsightAudio implements HttpFunction {
             // Get the audio contents from the response
             ByteString audioContents = response.getAudioContent();
             return audioContents.toByteArray();
-        }
-    }
-
-    private String getUserIdFromAuthToken(HttpRequest request) throws Exception {
-        Optional<String> authHeader = request.getFirstHeader("Authorization");
-        if (authHeader.isEmpty() || !authHeader.get().startsWith("Bearer ")) {
-            throw new Exception("Authorization header is missing or not Bearer type.");
-        }
-
-        String idToken = authHeader.get().substring(7);
-        try {
-            FirebaseToken decodedToken = this.firebaseAuth.verifyIdToken(idToken);
-            return decodedToken.getUid();
-        } catch (Exception e) {
-            throw new Exception("Invalid Firebase ID token: " + e.getMessage());
         }
     }
 }

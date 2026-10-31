@@ -50,6 +50,7 @@ public class GetInsightAudioTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        lenient().when(request.getFirstHeader("Origin")).thenReturn(Optional.of("http://localhost:4200"));
         responseWriter = new StringWriter();
         bufferedWriter = new BufferedWriter(responseWriter);
         when(response.getWriter()).thenReturn(bufferedWriter);
@@ -64,6 +65,7 @@ public class GetInsightAudioTest {
         // Mock authentication
         when(request.getFirstHeader("Authorization")).thenReturn(Optional.of("Bearer fake-token"));
         when(firebaseAuth.verifyIdToken("fake-token")).thenReturn(decodedToken);
+        when(decodedToken.getUid()).thenReturn("owner-uid");
 
         // Mock request parameter
         when(request.getFirstQueryParameter("insightId")).thenReturn(Optional.of("test-insight-id"));
@@ -74,6 +76,7 @@ public class GetInsightAudioTest {
         when(documentReference.get()).thenReturn(future);
         when(future.get()).thenReturn(documentSnapshot);
         when(documentSnapshot.exists()).thenReturn(true);
+        when(documentSnapshot.getString("userId")).thenReturn("owner-uid");
         when(documentSnapshot.getString("text")).thenReturn("This is a test insight.");
 
         // Mock Text-to-Speech client creation and speech synthesis

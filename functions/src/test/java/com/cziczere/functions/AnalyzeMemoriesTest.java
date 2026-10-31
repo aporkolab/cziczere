@@ -66,6 +66,7 @@ class AnalyzeMemoriesTest {
 
     @BeforeEach
     void setUp() throws IOException {
+        lenient().when(request.getFirstHeader("Origin")).thenReturn(Optional.of("http://localhost:4200"));
         responseWriter = new StringWriter();
         bufferedWriter = new BufferedWriter(responseWriter);
         when(response.getWriter()).thenReturn(bufferedWriter);

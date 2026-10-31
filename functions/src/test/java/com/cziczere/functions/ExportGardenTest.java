@@ -11,6 +11,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.Optional;
 import java.awt.image.BufferedImage;
 import java.io.BufferedWriter;
 import java.io.StringWriter;
@@ -33,6 +34,7 @@ class ExportGardenTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        lenient().when(request.getFirstHeader("Origin")).thenReturn(Optional.of("http://localhost:4200"));
         // When getWriter() is called on the mocked response, return our mocked writer
         when(response.getWriter()).thenReturn(bufferedWriter);
     }
@@ -40,7 +42,7 @@ class ExportGardenTest {
     @Test
     void service_shouldReturnPoster_whenMemoriesExist() throws Exception {
         // Arrange
-        ExportGarden exportGarden = spy(new ExportGarden(db));
+        ExportGarden exportGarden = spy(new ExportGarden(db, mock(com.google.firebase.auth.FirebaseAuth.class)));
         String testUserId = "test-user-123";
         List<MemoryData> memories = List.of(
             new MemoryData(testUserId, "Test Memory", "p1", "url1", 1L, "memory", Collections.emptyMap())
@@ -68,7 +70,7 @@ class ExportGardenTest {
     @Test
     void service_shouldReturnNotFound_whenNoMemories() throws Exception {
         // Arrange
-        ExportGarden gardenExporter = spy(new ExportGarden(db));
+        ExportGarden gardenExporter = spy(new ExportGarden(db, mock(com.google.firebase.auth.FirebaseAuth.class)));
         String testUserId = "test-user-123";
         ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
 
