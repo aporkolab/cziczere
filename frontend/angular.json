@@ -59,6 +59,14 @@
               "extractLicenses": false,
               "sourceMap": true,
               "namedChunks": true
+            },
+            "self-hosted": {
+              "fileReplacements": [
+                {
+                  "replace": "src/environments/environment.ts",
+                  "with": "src/environments/environment.self-hosted.ts"
+                }
+              ]
             }
           },
           "defaultConfiguration": "production"

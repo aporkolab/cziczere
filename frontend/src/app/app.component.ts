@@ -13,6 +13,7 @@ import { ArViewComponent } from './ar-view/ar-view.component';
 import { ApiService, InsightData, MemoryData } from './api.service';
 import { ArStateService } from './ar-state.service';
 import { NotificationService } from './notification.service';
+import { environment } from '../environments/environment';
 
 @Component({
   selector: 'app-root',
@@ -55,8 +56,10 @@ export class AppComponent implements OnInit {
 
   login() {
     signInWithPopup(this.auth, new GoogleAuthProvider()).then(result => {
-      this.notificationService.requestPermission();
-      this.notificationService.listenForMessages();
+      if (environment.features.enableNotifications) {
+        this.notificationService.requestPermission();
+        this.notificationService.listenForMessages();
+      }
       const userDoc = doc(this.firestore, `users/${result.user.uid}`);
       setDoc(userDoc, { lastActive: Date.now() }, { merge: true });
     });
