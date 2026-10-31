@@ -1,6 +1,14 @@
 package com.cziczere.functions;
 
-import com.google.cloud.aiplatform.v1.*;
+import com.google.cloud.aiplatform.v1.Blob;
+import com.google.cloud.aiplatform.v1.Candidate;
+import com.google.cloud.aiplatform.v1.Content;
+import com.google.cloud.aiplatform.v1.EndpointName;
+import com.google.cloud.aiplatform.v1.GenerateContentRequest;
+import com.google.cloud.aiplatform.v1.GenerateContentResponse;
+import com.google.cloud.aiplatform.v1.GenerationConfig;
+import com.google.cloud.aiplatform.v1.Part;
+import com.google.cloud.aiplatform.v1.PredictionServiceClient;
 import com.google.protobuf.ByteString;
 import java.io.IOException;
 import java.util.List;
@@ -25,7 +33,7 @@ class LocalVertexTest {
         Blob image = Blob.newBuilder().setMimeType("image/jpeg").setData(ByteString.copyFromUtf8("image")).build();
         GenerateContentResponse response = GenerateContentResponse.newBuilder()
             .addCandidates(Candidate.newBuilder().setContent(Content.newBuilder()
-                .addParts(Part.newBuilder().setThought(true).setInlineData(Blob.getDefaultInstance()))
+                .addParts(Part.newBuilder().setThought(true).setInlineData(image.toBuilder().setData(ByteString.copyFromUtf8("draft"))))
                 .addParts(Part.newBuilder().setText("Generated image"))
                 .addParts(Part.newBuilder().setInlineData(image)))).build();
         when(client.generateContent(any(GenerateContentRequest.class))).thenReturn(response, GenerateContentResponse.getDefaultInstance());
