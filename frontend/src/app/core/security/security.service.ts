@@ -1,7 +1,7 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable } from '@angular/core';
 import { HttpInterceptor, HttpRequest, HttpHandler, HttpEvent } from '@angular/common/http';
-import { Observable, BehaviorSubject, throwError, timer, of } from 'rxjs';
-import { catchError, tap, switchMap, delayWhen } from 'rxjs/operators';
+import { Observable, BehaviorSubject, throwError } from 'rxjs';
+import { catchError, tap } from 'rxjs/operators';
 import { environment } from '../../../environments/environment';
 
 export interface SecurityConfig {
@@ -26,7 +26,7 @@ export interface RateLimitInfo {
 export interface SecurityViolation {
   type: 'rate_limit' | 'csp_violation' | 'xss_attempt' | 'unauthorized_origin';
   severity: 'low' | 'medium' | 'high' | 'critical';
-  details: any;
+  details: Record<string, string | number>;
   timestamp: Date;
   userId?: string;
   ip?: string;
@@ -128,13 +128,14 @@ export class SecurityService implements HttpInterceptor {
   private setupInputSanitization(): void {
     // Monitor for potential XSS attempts
     const originalSetAttribute = Element.prototype.setAttribute;
+    const detectXSSAttempt = this.detectXSSAttempt.bind(this);
+    const recordViolation = this.recordSecurityViolation.bind(this);
     Element.prototype.setAttribute = function(name: string, value: string) {
-      if (this.detectXSSAttempt(name, value)) {
-        const securityService = this.getSecurityService();
-        securityService?.recordSecurityViolation({
+      if (detectXSSAttempt(name, value)) {
+        recordViolation({
           type: 'xss_attempt',
           severity: 'critical',
-          details: { attribute: name, value: value },
+          details: { attribute: name, value },
           timestamp: new Date()
         });
         return;
@@ -158,15 +159,8 @@ export class SecurityService implements HttpInterceptor {
     );
   }
 
-  private getSecurityService(): SecurityService | null {
-    // Helper method to get security service instance
-    // This is a simplified approach - in practice, use proper DI
-    return (window as any).__securityService || null;
-  }
-
   // HTTP Interceptor implementation
-  intercept(req: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
-    const startTime = Date.now();
+  intercept(req: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
     const clientIP = this.getClientIP();
     
     // Check if IP is blocked
@@ -210,7 +204,7 @@ export class SecurityService implements HttpInterceptor {
       }),
       catchError(error => {
         // Track failed requests for suspicious activity detection
-        this.trackFailedRequest(clientIP, req.url);
+        this.trackFailedRequest(clientIP);
         return throwError(() => error);
       })
     );
@@ -297,7 +291,7 @@ export class SecurityService implements HttpInterceptor {
     );
   }
 
-  private addSecurityHeaders(req: HttpRequest<any>): HttpRequest<any> {
+  private addSecurityHeaders(req: HttpRequest<unknown>): HttpRequest<unknown> {
     let headers = req.headers;
 
     // Add CSRF token if available
@@ -316,7 +310,7 @@ export class SecurityService implements HttpInterceptor {
     return req.clone({ headers });
   }
 
-  private trackFailedRequest(clientIP: string, url: string): void {
+  private trackFailedRequest(clientIP: string): void {
     const key = `${clientIP}_failed`;
     const current = this.suspiciousActivities.get(key) || 0;
     this.suspiciousActivities.set(key, current + 1);
@@ -457,6 +451,3 @@ export class SecurityService implements HttpInterceptor {
     this.config = { ...this.config, ...config };
   }
 }
-
-// Set up global reference for XSS detection
-(window as any).__securityService = SecurityService;

@@ -21,7 +21,7 @@ env:
 jobs:
   # Quality checks and testing
   quality-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     
     steps:
       - name: Checkout code
@@ -40,7 +40,7 @@ jobs:
 
       - name: Lint frontend code
         working-directory: ./frontend
-        run: npm run lint
+        run: npm run lint -- --max-warnings=0
 
       - name: Type check
         working-directory: ./frontend
@@ -58,7 +58,7 @@ jobs:
       #     name: frontend-coverage
 
   backend-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: functions
@@ -73,7 +73,7 @@ jobs:
         run: mvn -B verify
 
   firebase-tools-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: functions/frontend
@@ -91,7 +91,7 @@ jobs:
 
   # Security scanning
   security-scan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
@@ -136,6 +136,9 @@ jobs:
 
       - name: CodeQL Analysis
         uses: github/codeql-action/init@v4
+        env:
+          # The Maven-traced Java build requires a full CodeQL database.
+          CODEQL_OVERLAY_DATABASE_MODE: none
         with:
           languages: javascript, java
           
@@ -148,7 +151,7 @@ jobs:
 
   # Backend testing and deployment
   deploy-backend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [quality-check, backend-test, security-scan, firebase-tools-check]
     if: github.ref == 'refs/heads/main'
 
@@ -209,7 +212,7 @@ jobs:
 
   # Frontend build and deployment
   deploy-frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [quality-check, backend-test, security-scan, firebase-tools-check]
     if: github.ref == 'refs/heads/main'
 
@@ -317,7 +320,7 @@ jobs:
 
   # Performance testing
   performance-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [deploy-frontend]
     if: github.ref == 'refs/heads/main'
 
@@ -351,7 +354,7 @@ jobs:
 
   # Integration tests
   integration-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [deploy-frontend, deploy-backend]
     if: github.ref == 'refs/heads/main'
 
@@ -395,7 +398,7 @@ jobs:
 
   # Monitoring and notifications
   post-deployment:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [deploy-frontend, deploy-backend, performance-test, integration-test]
     if: always() && github.ref == 'refs/heads/main'
     env:
@@ -434,7 +437,7 @@ jobs:
 
   # Automated monitoring setup
   setup-monitoring:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [deploy-frontend, deploy-backend]
     if: github.ref == 'refs/heads/main'
     env:

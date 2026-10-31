@@ -35,7 +35,7 @@ export class ArViewComponent implements OnInit, OnDestroy {
   private camera!: THREE.PerspectiveCamera;
   private controller!: THREE.XRTargetRaySpace;
   private reticle!: THREE.Mesh;
-  private hitTestSource: any | null = null; // THREE.XRHitTestSource
+  private hitTestSource?: XRHitTestSource;
   private hitTestSourceRequested = false;
   private placedObjects: { mesh: THREE.Mesh; memory: MemoryData }[] = [];
   private raycaster = new THREE.Raycaster();
@@ -201,8 +201,7 @@ export class ArViewComponent implements OnInit, OnDestroy {
     return canvas;
   }
 
-  private async updateHitTest(frame: any): Promise<void> {
-    // THREE.XRFrame
+  private async updateHitTest(frame: XRFrame): Promise<void> {
     const session = this.renderer.xr.getSession();
     if (!session) return;
 

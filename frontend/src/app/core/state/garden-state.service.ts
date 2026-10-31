@@ -1,13 +1,21 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable } from '@angular/core';
 import { BehaviorSubject, Observable, distinctUntilChanged, map, shareReplay } from 'rxjs';
 import { MemoryData, InsightData, AtmosphereData } from '../../api.service';
 import { environment } from '../../../environments/environment';
 
 // Actions
-export interface GardenAction {
-  type: string;
-  payload?: any;
-}
+export type GardenAction =
+  | { type: 'INIT' | 'LOAD_MEMORIES_START' | 'CLEAR_ERROR'; payload?: undefined }
+  | { type: 'LOAD_MEMORIES_SUCCESS'; payload: MemoryData[] }
+  | { type: 'LOAD_MEMORIES_ERROR' | 'SET_ERROR'; payload: string | null }
+  | { type: 'ADD_MEMORY_OPTIMISTIC' | 'ADD_MEMORY_SUCCESS'; payload: MemoryData }
+  | { type: 'UPDATE_MEMORY'; payload: { id: string; updates: Partial<MemoryData> } }
+  | { type: 'DELETE_MEMORY'; payload: { id: string } }
+  | { type: 'LOAD_INSIGHTS_SUCCESS'; payload: InsightData[] }
+  | { type: 'ADD_INSIGHT'; payload: InsightData }
+  | { type: 'UPDATE_ATMOSPHERE'; payload: AtmosphereData | null }
+  | { type: 'SET_LOADING'; payload: boolean }
+  | { type: 'SET_PERFORMANCE_METRICS'; payload: Omit<PerformanceMetrics, 'lastMeasured'> };
 
 export const GardenActions = {
   // Memory actions
@@ -40,6 +48,12 @@ export interface PerformanceMetrics {
   memoryUsage: number;
   apiResponseTime: number;
   lastMeasured: Date;
+}
+
+interface EmotionalTrend {
+  average: number;
+  trend: 'increasing' | 'decreasing' | 'stable';
+  count: number;
 }
 
 export interface GardenState {
@@ -202,7 +216,7 @@ export class GardenStateService {
           totalPlants: state.totalPlants + 1
         };
 
-      case GardenActions.ADD_MEMORY_SUCCESS:
+      case GardenActions.ADD_MEMORY_SUCCESS: {
         // Replace optimistic memory with real one
         const updatedMemories = state.memories.map(memory => 
           memory.timestamp === action.payload.timestamp ? action.payload : memory
@@ -212,6 +226,7 @@ export class GardenStateService {
           memories: updatedMemories,
           lastUpdated: new Date()
         };
+      }
 
       case GardenActions.UPDATE_MEMORY:
         return {
@@ -296,11 +311,11 @@ export class GardenStateService {
   }
 
   // Helper methods
-  private calculateEmotionalTrends(memories: MemoryData[]): any {
+  private calculateEmotionalTrends(memories: MemoryData[]): Record<string, EmotionalTrend> {
     if (memories.length === 0) return {};
     
     const emotions = ['joy', 'sadness', 'anger', 'fear', 'surprise'];
-    const trends: any = {};
+    const trends: Record<string, EmotionalTrend> = {};
     
     emotions.forEach(emotion => {
       const emotionValues = memories
@@ -319,7 +334,7 @@ export class GardenStateService {
     return trends;
   }
 
-  private calculateTrend(values: number[]): 'increasing' | 'decreasing' | 'stable' {
+  private calculateTrend(values: number[]): EmotionalTrend['trend'] {
     if (values.length < 2) return 'stable';
     
     const recent = values.slice(-5); // Last 5 values

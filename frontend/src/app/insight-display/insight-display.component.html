@@ -22,7 +22,7 @@
             (click)="playInsightAudio(insight.id)"
             [disabled]="(isAudioLoading$ | async) === true"
           >
-            @if (!(isAudioLoading$ | async)) {
+            @if ((isAudioLoading$ | async) !== true) {
               Listen 🔊
             } @else {
               <div class="spinner-small"></div>

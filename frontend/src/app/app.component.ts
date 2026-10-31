@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, ViewChild } from '@angular/core';
+import { Component, OnInit, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Auth, User, user, GoogleAuthProvider, signInWithPopup, signOut } from '@angular/fire/auth';
 import { Firestore, doc, setDoc } from '@angular/fire/firestore';
@@ -28,8 +28,6 @@ export class AppComponent implements OnInit {
   private arStateService: ArStateService = inject(ArStateService);
   private firestore: Firestore = inject(Firestore);
   private notificationService: NotificationService = inject(NotificationService);
-
-  @ViewChild(GardenComponent) gardenComponent!: GardenComponent;
 
   user: Observable<User | null> = user(this.auth);
 
@@ -125,14 +123,6 @@ export class AppComponent implements OnInit {
     ).subscribe(insight => {
         this.latestInsight$ = of(insight);
     });
-  }
-
-  onExportPoster(): void {
-      if (this.gardenComponent) {
-          this.gardenComponent.exportAsPoster();
-      } else {
-          console.error("Garden component not available to export.");
-      }
   }
 
   onMemoryClicked(memory: MemoryData) {
