@@ -84,7 +84,7 @@ python3 start.py --firebase ./firebase-web.json --credentials "/path/to/google-c
 
 Set environment variables before launching to override `CZ_PORT` (default `4200`), `GCS_BUCKET_NAME` for images or `INSIGHT_AUDIO_BUCKET` for audio. The local defaults for `GCP_REGION`, `GEMINI_MODEL` and `IMAGEN_MODEL` are `global`, `gemini-3.1-flash-lite` and `gemini-3.1-flash-image`, respectively. Choose a location supported by both selected models. [Google model availability](https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/model-versions)
 
-For hosted deployments, see the [production deployment notes](PRODUCTION_DEPLOYMENT.md).
+GitHub Actions runs builds, tests and security checks. Cloud deployment is disabled. Running the full app locally still uses the Google Cloud services described above.
 
 ## 🤝 Contributing
 

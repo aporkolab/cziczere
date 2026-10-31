@@ -1,7 +1,6 @@
-# Service Account Setup for Firebase CI/CD
+# Archived Firebase deployment account setup
 
-## Current Issue
-Your service account doesn't have the necessary permissions to deploy Firebase functions and hosting. The error "The caller does not have permission" indicates missing IAM roles.
+Cloud deployment is disabled. The current CI workflow requires no Google Cloud service account. The following settings describe the former deployment.
 
 ## Required Service Account Roles
 
@@ -71,15 +70,6 @@ Make sure these APIs are enabled in your project:
 **Quick Enable Link:**
 https://console.cloud.google.com/flows/enableapi?apiid=cloudresourcemanager.googleapis.com,firebase.googleapis.com,cloudfunctions.googleapis.com,firebasehosting.googleapis.com,cloudbuild.googleapis.com&project=cziczere-ai
 
-## Verify Setup
-
-After adding roles and enabling APIs:
-
-1. **Wait 2-3 minutes** for changes to propagate
-2. **Push to main branch** or **manually trigger** the workflow
-3. **Check Actions tab** - the verification step will show detailed info
-4. **Look for green checkmarks** (✅) in the logs
-
 ## Troubleshooting
 
 ### If you still get permission errors:
@@ -92,13 +82,3 @@ After adding roles and enabling APIs:
 1. Go to **IAM & Admin** → **Service Accounts**
 2. **Create a new service account** if needed
 3. **Download the JSON key** and update your `GCP_SA_KEY` GitHub secret
-
-## Current Workflow Status
-
-The workflow now includes verification steps that will:
-- ✅ Show which service account is authenticated
-- ✅ Test project access before deployment
-- ✅ Verify Firebase access
-- ❌ Stop with clear error messages if permissions are missing
-
-This will help you identify exactly what's missing.

@@ -1,8 +1,6 @@
-# Production Deployment Guide
+# Cloud deployment (disabled)
 
-## 🚀 Memory Garden - Production Ready Deployment
-
-This guide covers the complete production deployment process for the Memory Garden application, including all senior-level features and monitoring.
+GitHub Actions runs CI only, including on pushes to `main` and manual runs. The sections below document the former production setup, which requires a billing-enabled Google Cloud project. [Previous deployment workflow](https://github.com/aporkolab/cziczere/blob/a53decf9a91dd528c1679a16315356563a043773/.github/workflows/deploy.yml)
 
 ## 🔧 Prerequisites
 
@@ -14,7 +12,7 @@ This guide covers the complete production deployment process for the Memory Gard
 - **Slack Workspace** for deployment notifications (optional)
 
 ### Required Secrets in GitHub
-The workflow deploys to `cziczere-ai`. Set the Actions **variable** `FIREBASE_PROJECT_ID` to explicitly select a different production project. Store the deployer JSON as the **secret** `GCP_SA_KEY` and grant that identity access on the target project.
+The former workflow targeted `cziczere-ai`. Set the Actions **variable** `FIREBASE_PROJECT_ID` to explicitly select a different production project. Store the deployer JSON as the **secret** `GCP_SA_KEY` and grant that identity access on the target project.
 
 Hosting obtains the web configuration from the project’s registered web app by default. Supply the web SDK secrets together only when using a custom configuration. Set these values under Settings → Secrets and variables → Actions as needed.
 
@@ -113,7 +111,7 @@ export const environment = {
 };
 ```
 
-The backend job deploys the six browser HTTP functions with `gcloud functions deploy` and their fully qualified Java entry points. Cloud Build compiles the Maven sources. On initial creation, each function accepts browser requests and verifies the caller's Firebase ID token in Java. Subsequent deployments retain its invoker policy and runtime settings and update the project ID. The separate WebSocket endpoint and scheduled reminder trigger require their own infrastructure.
+The former backend job deployed the six browser HTTP functions with `gcloud functions deploy` and their fully qualified Java entry points. Cloud Build compiles the Maven sources. On initial creation, each function accepts browser requests and verifies the caller's Firebase ID token in Java. Subsequent deployments retain its invoker policy and runtime settings and update the project ID. The separate WebSocket endpoint and scheduled reminder trigger require their own infrastructure.
 
 For a fresh deployment, enable Cloud Functions, Cloud Run, Cloud Build, Artifact Registry and the APIs used by the application. Give the deployer permission to deploy Gen 2 functions in the target project, act as the runtime service account and set the invoker policy for newly created functions. The runtime identity also needs access to the project's Firestore database, Firebase Storage bucket, Vertex AI and Text-to-Speech. [Cloud Functions deployment IAM](https://cloud.google.com/functions/docs/reference/iam/roles)
 
@@ -138,24 +136,9 @@ The application includes comprehensive security measures:
 - File upload validation
 - URL safety validation
 
-### 4. Deploy to Production
+### 4. Release automation
 
-Push to main branch to trigger automated deployment:
-
-```bash
-git add .
-git commit -m "Production deployment"
-git push origin main
-```
-
-The CI/CD pipeline will:
-1. ✅ Run quality checks (linting, testing, type checking)
-2. 🔒 Security scanning (Snyk, CodeQL, npm audit)
-3. 🏗️ Build and deploy backend (Cloud Functions)
-4. 🌐 Build and deploy frontend (Firebase Hosting)
-5. ⚡ Performance testing (Lighthouse CI)
-6. 🧪 Integration testing (Playwright)
-7. 📊 Setup monitoring and alerts
+Production release, post-deployment notifications and cloud monitoring jobs are disabled. The current build and test workflow requires no Google Cloud credentials.
 
 ## 📊 Monitoring & Observability
 
@@ -249,7 +232,7 @@ firebase hosting:clone SOURCE_SITE_ID:SOURCE_CHANNEL_ID DEST_SITE_ID:live
 ```
 
 ### Backend Rollback
-Revert the relevant application commit and rerun the main deployment so Cloud Build uses the previous Java sources and the same function entry points.
+The former workflow redeployed the previous Java sources and function entry points when an application change was reverted.
 
 ## 📋 Production Checklist
 
