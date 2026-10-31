@@ -43,6 +43,10 @@ buildNumber.properties
 
 # Angular specific
 /dist/
+frontend/dist/
+frontend/coverage/
+.env.local
+**/.env.local
 /out-tsc/
 /tmp/
 /coverage/
