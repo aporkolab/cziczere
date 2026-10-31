@@ -4,7 +4,7 @@ import { FormControl, FormGroup, ReactiveFormsModule, Validators } from '@angula
 import { WebSocketService } from '../services/websocket.service';
 import { ApiService, MemoryData } from '../api.service';
 import { Auth, user } from '@angular/fire/auth';
-import { Subscription, Observable, BehaviorSubject } from 'rxjs';
+import { Subscription, BehaviorSubject } from 'rxjs';
 import { trigger, transition, style, animate, query, stagger } from '@angular/animations';
 
 export interface ChatMessage {
@@ -13,14 +13,14 @@ export interface ChatMessage {
   sender: 'user' | 'assistant';
   timestamp: number;
   type: 'text' | 'insight' | 'suggestion' | 'memory_analysis';
-  metadata?: any;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ConversationContext {
   recentMemories: MemoryData[];
   currentMood: string;
   conversationHistory: ChatMessage[];
-  userPreferences: any;
+  userPreferences: Record<string, unknown>;
 }
 
 @Component({

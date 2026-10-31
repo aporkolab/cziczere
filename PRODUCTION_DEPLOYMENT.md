@@ -14,7 +14,9 @@ This guide covers the complete production deployment process for the Memory Gard
 - **Slack Workspace** for deployment notifications (optional)
 
 ### Required Secrets in GitHub
-Set these in your GitHub repository settings under Secrets and variables > Actions:
+The workflow deploys to `cziczere-ai`. Set the Actions **variable** `FIREBASE_PROJECT_ID` to explicitly select a different production project. Store the deployer JSON as the **secret** `GCP_SA_KEY` and grant that identity access on the target project.
+
+Hosting obtains the web configuration from the project’s registered web app by default. Supply the web SDK secrets together only when using a custom configuration. Set these values under Settings → Secrets and variables → Actions as needed.
 
 ```bash
 # Firebase Configuration
@@ -24,7 +26,6 @@ FIREBASE_PROJECT_ID=your_project_id
 FIREBASE_STORAGE_BUCKET=your_project.appspot.com
 FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 FIREBASE_APP_ID=your_app_id
-FIREBASE_TOKEN=your_firebase_deploy_token
 
 # Google Cloud Service Account
 GCP_SA_KEY=your_service_account_json_key
@@ -60,9 +61,9 @@ LHCI_GITHUB_APP_TOKEN=your_lighthouse_ci_token
 - **Security**: CSP headers, rate limiting, input sanitization
 - **Performance**: Lazy loading, bundle optimization, performance monitoring
 
-### Backend (Java 17)
-- **Runtime**: Google Cloud Functions
-- **AI Integration**: Vertex AI (Gemini 1.5 Flash + Imagen)
+### Backend (Java 21)
+- **Runtime**: second-generation Google Cloud Functions in `us-central1`
+- **AI Integration**: Vertex AI text and image models
 - **Database**: Firestore with security rules
 - **WebSocket**: Custom Java WebSocket handler
 - **Security**: Firebase Auth, rate limiting, input validation
@@ -111,6 +112,12 @@ export const environment = {
   }
 };
 ```
+
+The backend job deploys the six browser HTTP functions with `gcloud functions deploy` and their fully qualified Java entry points. Cloud Build compiles the Maven sources. On initial creation, each function accepts browser requests and verifies the caller's Firebase ID token in Java. Subsequent deployments retain its invoker policy and runtime settings and update the project ID. The separate WebSocket endpoint and scheduled reminder trigger require their own infrastructure.
+
+For a fresh deployment, enable Cloud Functions, Cloud Run, Cloud Build, Artifact Registry and the APIs used by the application. Give the deployer permission to deploy Gen 2 functions in the target project, act as the runtime service account and set the invoker policy for newly created functions. The runtime identity also needs access to the project's Firestore database, Firebase Storage bucket, Vertex AI and Text-to-Speech. [Cloud Functions deployment IAM](https://cloud.google.com/functions/docs/reference/iam/roles)
+
+New functions use the project’s default Firebase Storage bucket (override with the Actions variable `FUNCTIONS_STORAGE_BUCKET` or secret `FIREBASE_STORAGE_BUCKET`), the two default Firebase Hosting origins, and the same Gemini models as the local installation. Set the Actions variables `VERTEX_LOCATION`, `GEMINI_MODEL` and `IMAGEN_MODEL` before the first deploy to override the defaults. The Vertex location defaults to `global`.
 
 ### 3. Security Configuration
 
@@ -242,11 +249,7 @@ firebase hosting:clone SOURCE_SITE_ID:SOURCE_CHANNEL_ID DEST_SITE_ID:live
 ```
 
 ### Backend Rollback
-```bash
-# Deploy previous version
-git checkout previous-release-tag
-firebase deploy --only functions
-```
+Revert the relevant application commit and rerun the main deployment so Cloud Build uses the previous Java sources and the same function entry points.
 
 ## 📋 Production Checklist
 
