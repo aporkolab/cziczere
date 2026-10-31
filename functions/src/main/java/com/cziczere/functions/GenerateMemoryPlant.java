@@ -11,7 +11,12 @@ import com.google.cloud.vertexai.generativeai.GenerativeModel;
 import com.google.gson.Gson;
 import com.google.gson.JsonParseException;
 import com.google.firebase.auth.FirebaseAuth;
+import com.google.cloud.aiplatform.v1.Blob;
+import com.google.cloud.aiplatform.v1.Content;
 import com.google.cloud.aiplatform.v1.EndpointName;
+import com.google.cloud.aiplatform.v1.GenerateContentRequest;
+import com.google.cloud.aiplatform.v1.GenerationConfig;
+import com.google.cloud.aiplatform.v1.Part;
 import com.google.cloud.aiplatform.v1.PredictResponse;
 import com.google.cloud.aiplatform.v1.PredictionServiceClient;
 import com.google.cloud.aiplatform.v1.PredictionServiceSettings;
@@ -19,6 +24,7 @@ import com.google.cloud.storage.BlobId;
 import com.google.cloud.storage.BlobInfo;
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
+import com.google.protobuf.ByteString;
 import com.google.protobuf.Struct;
 import com.google.protobuf.Value;
 
@@ -58,7 +64,7 @@ public class GenerateMemoryPlant implements HttpFunction {
 
     public GenerateMemoryPlant() throws IOException {
         this.db = FirestoreOptions.getDefaultInstance().getService();
-        this.vertexAI = new VertexAI(PROJECT_ID, REGION);
+        this.vertexAI = FunctionSupport.vertexAI();
         this.storage = StorageOptions.newBuilder().setProjectId(PROJECT_ID).build().getService();
         this.firebaseAuth = FirebaseAuth.getInstance();
     }
@@ -93,7 +99,7 @@ public class GenerateMemoryPlant implements HttpFunction {
                 String userText = requestData.text();
 
                 GeminiResponse geminiResponse = generateAnalysisWithGemini(userText);
-                String imageUrl = generateImageWithImagen(geminiResponse.imagePrompt());
+                String imageUrl = generateImage(geminiResponse.imagePrompt());
 
                 MemoryData newMemory = new MemoryData(
                     userId,
@@ -164,36 +170,63 @@ public class GenerateMemoryPlant implements HttpFunction {
         return new GeminiResponse(fallbackPrompt, Collections.singletonMap("unknown", 0.5));
     }
 
-    String generateImageWithImagen(String imagePrompt) throws IOException {
-        String endpoint = String.format("%s-aiplatform.googleapis.com:443", REGION);
-        PredictionServiceSettings predictionServiceSettings =
-            PredictionServiceSettings.newBuilder().setEndpoint(endpoint).build();
-
-        try (PredictionServiceClient predictionServiceClient =
-            PredictionServiceClient.create(predictionServiceSettings)) {
-            final EndpointName endpointName =
-                EndpointName.ofProjectLocationPublisherModelName(PROJECT_ID, REGION, "google", FunctionSupport.IMAGEN_MODEL);
-
-            PredictResponse predictResponse = predictionServiceClient.predict(
-                endpointName, List.of(buildImagenInstance(imagePrompt)), buildImagenParameters());
-
-            if (predictResponse.getPredictionsCount() == 0) {
-                throw new IOException("Imagen returned no predictions (the prompt may have been filtered).");
+    String generateImage(String imagePrompt) throws IOException {
+        PredictionServiceSettings settings = PredictionServiceSettings.newBuilder()
+            .setEndpoint(FunctionSupport.vertexHost(REGION) + ":443").build();
+        EndpointName model = EndpointName.ofProjectLocationPublisherModelName(
+            PROJECT_ID, REGION, "google", FunctionSupport.IMAGEN_MODEL);
+        try (PredictionServiceClient client = PredictionServiceClient.create(settings)) {
+            Blob image = FunctionSupport.IMAGEN_MODEL.startsWith("imagen-")
+                ? predictImagen(client, model, imagePrompt) : generateGeminiImage(client, model, imagePrompt);
+            String extension = switch (image.getMimeType()) {
+                case "image/png" -> ".png";
+                case "image/jpeg" -> ".jpg";
+                case "image/webp" -> ".webp";
+                default -> throw new IOException("Unsupported image type from Vertex AI.");
+            };
+            if (image.getData().isEmpty()) {
+                throw new IOException("Vertex AI returned an empty image.");
             }
-            Value encoded = predictResponse.getPredictions(0).getStructValue().getFieldsMap().get("bytesBase64Encoded");
-            if (encoded == null) {
-                throw new IOException("Imagen prediction did not contain image bytes.");
-            }
-            String base64Image = encoded.getStringValue();
-            byte[] imageBytes = Base64.getDecoder().decode(base64Image);
-
-            String blobName = UUID.randomUUID().toString() + ".png";
-            BlobId blobId = BlobId.of(GCS_BUCKET_NAME, blobName);
-            BlobInfo blobInfo = BlobInfo.newBuilder(blobId).setContentType("image/png").build();
-            storage.create(blobInfo, imageBytes);
-
-            return String.format("https://storage.googleapis.com/%s/%s", GCS_BUCKET_NAME, blobName);
+            BlobInfo info = BlobInfo.newBuilder(BlobId.of(GCS_BUCKET_NAME, UUID.randomUUID() + extension))
+                .setContentType(image.getMimeType()).build();
+            return MediaStorage.upload(storage, info, image.getData().toByteArray());
         }
+    }
+
+    static Blob generateGeminiImage(PredictionServiceClient client, EndpointName model, String prompt)
+            throws IOException {
+        GenerateContentRequest request = GenerateContentRequest.newBuilder()
+            .setModel(model.toString())
+            .addContents(Content.newBuilder().setRole("user").addParts(Part.newBuilder().setText(prompt)))
+            .setGenerationConfig(GenerationConfig.newBuilder()
+                .addResponseModalities(GenerationConfig.Modality.TEXT)
+                .addResponseModalities(GenerationConfig.Modality.IMAGE))
+            .build();
+        var response = client.generateContent(request);
+        for (var candidate : response.getCandidatesList()) {
+            for (Part part : candidate.getContent().getPartsList()) {
+                if (!part.getThought() && part.hasInlineData() && part.getInlineData().getMimeType().startsWith("image/")) {
+                    return part.getInlineData();
+                }
+            }
+        }
+        throw new IOException("Gemini returned no image (the prompt may have been filtered).");
+    }
+
+    private static Blob predictImagen(PredictionServiceClient client, EndpointName model, String prompt)
+            throws IOException {
+        PredictResponse response = client.predict(model, List.of(buildImagenInstance(prompt)), buildImagenParameters());
+        if (response.getPredictionsCount() == 0) {
+            throw new IOException("Imagen returned no predictions (the prompt may have been filtered).");
+        }
+        Map<String, Value> fields = response.getPredictions(0).getStructValue().getFieldsMap();
+        Value encoded = fields.get("bytesBase64Encoded");
+        if (encoded == null || encoded.getStringValue().isEmpty()) {
+            throw new IOException("Imagen prediction did not contain image bytes.");
+        }
+        String mimeType = fields.containsKey("mimeType") ? fields.get("mimeType").getStringValue() : "image/png";
+        return Blob.newBuilder().setMimeType(mimeType)
+            .setData(ByteString.copyFrom(Base64.getDecoder().decode(encoded.getStringValue()))).build();
     }
 
     /** Builds the Imagen request instance; the prompt is set as a proto value, never spliced into JSON text. */

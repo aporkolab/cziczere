@@ -149,7 +149,8 @@ public class ExportGarden implements HttpFunction {
                     g2d.drawImage(memoryImage, x, y, imageSize, imageSize, null);
                 }
             } catch (IOException e) {
-                logger.warning("Could not fetch or draw image from " + memory.imageUrl() + ": " + e.getMessage());
+                // Storage URLs and exception messages may include a private download token.
+                logger.warning("Skipping poster image " + (i + 1) + " (" + e.getClass().getSimpleName() + ")");
             }
         }
 
@@ -169,7 +170,7 @@ public class ExportGarden implements HttpFunction {
         }
         // Handle standard URLs
         if (!isAllowedImageUrl(imageUrl)) {
-            throw new IOException("Refusing to fetch image from untrusted URL: " + imageUrl);
+            throw new IOException("Refusing to fetch image from an untrusted URL");
         }
         URLConnection connection = URI.create(imageUrl).toURL().openConnection();
         connection.setConnectTimeout(IMAGE_TIMEOUT_MS);

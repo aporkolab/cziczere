@@ -59,9 +59,9 @@ export class AppComponent implements OnInit {
       if (environment.features.enableNotifications) {
         this.notificationService.requestPermission();
         this.notificationService.listenForMessages();
+        const userDoc = doc(this.firestore, `users/${result.user.uid}`);
+        setDoc(userDoc, { lastActive: Date.now() }, { merge: true });
       }
-      const userDoc = doc(this.firestore, `users/${result.user.uid}`);
-      setDoc(userDoc, { lastActive: Date.now() }, { merge: true });
     });
   }
 
@@ -83,7 +83,7 @@ export class AppComponent implements OnInit {
         this.showMemoryForm = false; // Hide form after successful submission
         // Also update the user's last active timestamp
         const user = this.auth.currentUser;
-        if (user) {
+        if (user && environment.features.enableNotifications) {
           const userDoc = doc(this.firestore, `users/${user.uid}`);
           setDoc(userDoc, { lastActive: newMemory.timestamp }, { merge: true });
         }

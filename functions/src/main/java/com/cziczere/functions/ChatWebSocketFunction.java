@@ -32,8 +32,6 @@ public class ChatWebSocketFunction implements HttpFunction {
     private static final Gson gson = new Gson();
     
     // Configuration
-    private static final String PROJECT_ID = FunctionSupport.PROJECT_ID;
-    private static final String REGION = FunctionSupport.REGION;
     private static final int MAX_CONVERSATION_HISTORY = 20;
     private static final int MAX_CONCURRENT_SESSIONS = 1000;
     
@@ -95,7 +93,7 @@ public class ChatWebSocketFunction implements HttpFunction {
     }
 
     public ChatWebSocketFunction() throws IOException {
-        this.vertexAI = new VertexAI(PROJECT_ID, REGION);
+        this.vertexAI = FunctionSupport.vertexAI();
         this.firebaseAuth = FirebaseAuth.getInstance();
         this.executorService = Executors.newFixedThreadPool(10);
         

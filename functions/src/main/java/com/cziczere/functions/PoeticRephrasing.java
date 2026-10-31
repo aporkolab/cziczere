@@ -24,9 +24,6 @@ public class PoeticRephrasing implements HttpFunction {
     private static final Logger logger = Logger.getLogger(PoeticRephrasing.class.getName());
     private static final Gson gson = new Gson();
 
-    private static final String PROJECT_ID = FunctionSupport.PROJECT_ID;
-    private static final String REGION = FunctionSupport.REGION;
-
     private final VertexAI vertexAI;
     private final FirebaseAuth firebaseAuth;
 
@@ -43,7 +40,7 @@ public class PoeticRephrasing implements HttpFunction {
     }
 
     public PoeticRephrasing() throws IOException {
-        this.vertexAI = new VertexAI(PROJECT_ID, REGION);
+        this.vertexAI = FunctionSupport.vertexAI();
         this.firebaseAuth = FirebaseAuth.getInstance();
     }
 

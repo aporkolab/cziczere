@@ -5,11 +5,12 @@ services:
       GOOGLE_APPLICATION_CREDENTIALS: /run/secrets/google-adc.json
       GCP_PROJECT_ID: ${CZ_PROJECT_ID:-}
       GOOGLE_CLOUD_PROJECT: ${CZ_PROJECT_ID:-}
-      GCP_REGION: ${GCP_REGION:-us-central1}
+      GCP_REGION: ${GCP_REGION:-global}
       GCS_BUCKET_NAME: ${GCS_BUCKET_NAME:-${CZ_STORAGE_BUCKET:-}}
+      FIREBASE_MEDIA_LINKS: "true"
       INSIGHT_AUDIO_BUCKET: ${INSIGHT_AUDIO_BUCKET:-${CZ_STORAGE_BUCKET:-}}
-      GEMINI_MODEL: ${GEMINI_MODEL:-}
-      IMAGEN_MODEL: ${IMAGEN_MODEL:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.1-flash-lite}
+      IMAGEN_MODEL: ${IMAGEN_MODEL:-gemini-3.1-flash-image}
       ALLOWED_ORIGINS: http://localhost:${CZ_PORT:-4200}
     volumes:
       - type: bind
@@ -22,13 +23,15 @@ services:
   frontend:
     build: ./frontend
     depends_on:
-      - backend
+      backend:
+        condition: service_started
+        restart: true
     ports:
       - "127.0.0.1:${CZ_PORT:-4200}:8080"
     volumes:
       - type: bind
-        source: ./.cziczere/public
-        target: /etc/cziczere/public
+        source: ${CZ_WEB_CONFIG:-./.cziczere/missing-web-config}
+        target: /etc/cziczere/public/firebase-config.json
         read_only: true
         bind:
           create_host_path: false
