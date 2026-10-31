@@ -1,14 +1,11 @@
 package com.cziczere.functions;
 
-import com.google.auth.oauth2.GoogleCredentials;
 import com.google.cloud.functions.HttpFunction;
 import com.google.cloud.functions.HttpRequest;
 import com.google.cloud.functions.HttpResponse;
 import com.google.cloud.vertexai.VertexAI;
 import com.google.cloud.vertexai.api.GenerateContentResponse;
 import com.google.cloud.vertexai.generativeai.GenerativeModel;
-import com.google.firebase.FirebaseApp;
-import com.google.firebase.FirebaseOptions;
 import com.google.firebase.auth.FirebaseAuth;
 import com.google.firebase.auth.FirebaseAuthException;
 import com.google.firebase.auth.FirebaseToken;
@@ -35,8 +32,8 @@ public class ChatWebSocketFunction implements HttpFunction {
     private static final Gson gson = new Gson();
     
     // Configuration
-    private static final String PROJECT_ID = System.getenv().getOrDefault("GCP_PROJECT_ID", "your-gcp-project-id");
-    private static final String REGION = System.getenv().getOrDefault("GCP_REGION", "us-central1");
+    private static final String PROJECT_ID = FunctionSupport.PROJECT_ID;
+    private static final String REGION = FunctionSupport.REGION;
     private static final int MAX_CONVERSATION_HISTORY = 20;
     private static final int MAX_CONCURRENT_SESSIONS = 1000;
     
@@ -93,21 +90,8 @@ public class ChatWebSocketFunction implements HttpFunction {
         }
     }
 
-    // Firebase initialization
     static {
-        try {
-            if (FirebaseApp.getApps().isEmpty()) {
-                GoogleCredentials credentials = GoogleCredentials.getApplicationDefault();
-                FirebaseOptions options = FirebaseOptions.builder()
-                    .setCredentials(credentials)
-                    .setProjectId(PROJECT_ID)
-                    .build();
-                FirebaseApp.initializeApp(options);
-                logger.info("Firebase Admin SDK initialized for ChatWebSocket");
-            }
-        } catch (IOException e) {
-            logger.log(Level.SEVERE, "Firebase Admin SDK initialization failed", e);
-        }
+        FunctionSupport.initFirebase();
     }
 
     public ChatWebSocketFunction() throws IOException {
@@ -179,9 +163,10 @@ public class ChatWebSocketFunction implements HttpFunction {
             throws Exception {
         // Fallback HTTP endpoint for testing
         String token = request.getFirstHeader("Authorization")
-            .map(h -> h.substring(7)) // Remove "Bearer "
+            .filter(h -> h.startsWith("Bearer "))
+            .map(h -> h.substring("Bearer ".length()))
             .orElse("");
-        
+
         String userId = authenticateUser(token);
         if (userId == null) {
             response.setStatusCode(401);
@@ -202,10 +187,13 @@ public class ChatWebSocketFunction implements HttpFunction {
     }
 
     private String authenticateUser(String token) {
+        if (token == null || token.isBlank()) {
+            return null;
+        }
         try {
             FirebaseToken decodedToken = firebaseAuth.verifyIdToken(token);
             return decodedToken.getUid();
-        } catch (FirebaseAuthException e) {
+        } catch (FirebaseAuthException | IllegalArgumentException e) {
             logger.warning("Authentication failed: " + e.getMessage());
             return null;
         }
@@ -319,7 +307,7 @@ public class ChatWebSocketFunction implements HttpFunction {
     }
 
     private ChatMessage generateAIResponse(ChatSession session, ChatMessage userMessage) throws IOException {
-        GenerativeModel model = new GenerativeModel("gemini-1.5-flash-001", vertexAI);
+        GenerativeModel model = new GenerativeModel(FunctionSupport.GEMINI_MODEL, vertexAI);
         
         String systemPrompt = buildSystemPrompt(session);
         String conversationHistory = buildConversationHistory(session);

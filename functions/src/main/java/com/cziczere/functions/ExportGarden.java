@@ -8,8 +8,6 @@ import com.google.cloud.functions.HttpFunction;
 import com.google.cloud.functions.HttpRequest;
 import com.google.cloud.functions.HttpResponse;
 import com.google.firebase.auth.FirebaseAuth;
-import com.google.firebase.auth.FirebaseAuthException;
-import com.google.firebase.auth.FirebaseToken;
 import com.google.gson.Gson;
 
 import javax.imageio.ImageIO;
@@ -18,9 +16,12 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.net.URL;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.net.URLConnection;
 import java.util.Base64;
 import java.util.List;
+import java.util.Set;
 import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.logging.Level;
@@ -32,36 +33,46 @@ public class ExportGarden implements HttpFunction {
     private static final Logger logger = Logger.getLogger(ExportGarden.class.getName());
     private static final Gson gson = new Gson();
     private final Firestore db;
+    private final FirebaseAuth firebaseAuth;
 
     // A4 at 150 DPI
     private static final int POSTER_WIDTH = 1240;
     private static final int POSTER_HEIGHT = 1754;
     private static final int PADDING = 50;
 
+    // Memory documents are client-writable (see firestore.rules), so imageUrl is untrusted:
+    // only fetch from our own storage hosts to prevent server-side request forgery.
+    private static final Set<String> ALLOWED_IMAGE_HOSTS = Set.of(
+        "storage.googleapis.com",
+        "firebasestorage.googleapis.com"
+    );
+    private static final int IMAGE_TIMEOUT_MS = 10_000;
+
+    static {
+        FunctionSupport.initFirebase();
+    }
+
     public ExportGarden() throws IOException {
-        this.db = FirestoreOptions.getDefaultInstance().getService();
+        this(FirestoreOptions.getDefaultInstance().getService(), FirebaseAuth.getInstance());
     }
 
     // Constructor for testing
-    ExportGarden(Firestore db) {
+    ExportGarden(Firestore db, FirebaseAuth firebaseAuth) {
         this.db = db;
-    }
-
-    static class AuthException extends Exception {
-        public AuthException(String message) {
-            super(message);
-        }
+        this.firebaseAuth = firebaseAuth;
     }
 
     record PosterResponse(String base64Image) {}
 
     @Override
     public void service(HttpRequest request, HttpResponse response) throws Exception {
+        if (FunctionSupport.handleCors(request, response, "POST")) {
+            return;
+        }
         // This is required for the AWT toolkit to work in a headless environment (like a Cloud Function)
         System.setProperty("java.awt.headless", "true");
 
         response.appendHeader("Content-Type", "application/json");
-        response.appendHeader("Access-Control-Allow-Origin", "*"); // Basic CORS for development
 
         try {
             String userId = getUserIdFromAuthToken(request);
@@ -80,10 +91,10 @@ public class ExportGarden implements HttpFunction {
             response.getWriter().write(gson.toJson(new PosterResponse(base64Image)));
             response.getWriter().flush();
 
-        } catch (AuthException e) {
+        } catch (FunctionSupport.AuthException e) {
             logger.warning("Authentication failed: " + e.getMessage());
             response.setStatusCode(401, "Unauthorized");
-            response.getWriter().write("{\"error\":\"" + e.getMessage() + "\"}");
+            response.getWriter().write(FunctionSupport.errorJson(e.getMessage()));
         } catch (Exception e) {
             logger.log(Level.SEVERE, "Internal Server Error during poster generation", e);
             response.setStatusCode(500, "Internal Server Error.");
@@ -91,18 +102,8 @@ public class ExportGarden implements HttpFunction {
         }
     }
 
-    String getUserIdFromAuthToken(HttpRequest request) throws AuthException {
-        Optional<String> authHeader = request.getFirstHeader("Authorization");
-        if (authHeader.isEmpty() || !authHeader.get().startsWith("Bearer ")) {
-            throw new AuthException("Authorization header is missing or not Bearer type.");
-        }
-        String idToken = authHeader.get().substring(7);
-        try {
-            FirebaseToken decodedToken = FirebaseAuth.getInstance().verifyIdToken(idToken);
-            return decodedToken.getUid();
-        } catch (FirebaseAuthException e) {
-            throw new AuthException("Invalid Firebase ID token: " + e.getMessage());
-        }
+    String getUserIdFromAuthToken(HttpRequest request) throws FunctionSupport.AuthException {
+        return FunctionSupport.requireUserId(request, firebaseAuth);
     }
 
     List<MemoryData> getMemoriesForUser(String userId) throws ExecutionException, InterruptedException {
@@ -148,7 +149,7 @@ public class ExportGarden implements HttpFunction {
                     g2d.drawImage(memoryImage, x, y, imageSize, imageSize, null);
                 }
             } catch (IOException e) {
-                logger.warning("Could not fetch or draw image for memory: " + memory.userText() + " from " + memory.imageUrl());
+                logger.warning("Could not fetch or draw image from " + memory.imageUrl() + ": " + e.getMessage());
             }
         }
 
@@ -167,9 +168,27 @@ public class ExportGarden implements HttpFunction {
             return ImageIO.read(new java.io.ByteArrayInputStream(imageBytes));
         }
         // Handle standard URLs
-        URL url = new URL(imageUrl);
-        try (InputStream is = url.openStream()) {
+        if (!isAllowedImageUrl(imageUrl)) {
+            throw new IOException("Refusing to fetch image from untrusted URL: " + imageUrl);
+        }
+        URLConnection connection = URI.create(imageUrl).toURL().openConnection();
+        connection.setConnectTimeout(IMAGE_TIMEOUT_MS);
+        connection.setReadTimeout(IMAGE_TIMEOUT_MS);
+        try (InputStream is = connection.getInputStream()) {
             return ImageIO.read(is);
+        }
+    }
+
+    static boolean isAllowedImageUrl(String imageUrl) {
+        try {
+            URI uri = new URI(imageUrl);
+            return "https".equalsIgnoreCase(uri.getScheme())
+                && uri.getHost() != null
+                && ALLOWED_IMAGE_HOSTS.contains(uri.getHost().toLowerCase())
+                && uri.getPort() == -1
+                && uri.getUserInfo() == null;
+        } catch (URISyntaxException e) {
+            return false;
         }
     }
 

@@ -20,7 +20,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
-import org.mockito.MockedStatic;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -60,24 +59,22 @@ class GetAtmosphereTest {
 
     @BeforeEach
     void setUp() throws IOException {
+        lenient().when(request.getFirstHeader("Origin")).thenReturn(Optional.of("http://localhost:4200"));
         responseWriter = new StringWriter();
         bufferedWriter = new BufferedWriter(responseWriter);
         when(response.getWriter()).thenReturn(bufferedWriter);
 
-        getAtmosphereFunction = Mockito.spy(new GetAtmosphere(db, vertexAI));
+        getAtmosphereFunction = Mockito.spy(new GetAtmosphere(db, vertexAI, firebaseAuth));
 
         lenient().doReturn(generativeModel).when(getAtmosphereFunction).getGenerativeModel(anyString());
     }
 
     private void mockAuthAndServiceCall() throws Exception {
-        try (MockedStatic<FirebaseAuth> mockedAuth = Mockito.mockStatic(FirebaseAuth.class)) {
-            mockedAuth.when(FirebaseAuth::getInstance).thenReturn(firebaseAuth);
-            when(request.getFirstHeader("Authorization")).thenReturn(Optional.of("Bearer fake-token"));
-            when(firebaseAuth.verifyIdToken("fake-token")).thenReturn(decodedToken);
-            when(decodedToken.getUid()).thenReturn("test-user-id");
+        when(request.getFirstHeader("Authorization")).thenReturn(Optional.of("Bearer fake-token"));
+        when(firebaseAuth.verifyIdToken("fake-token")).thenReturn(decodedToken);
+        when(decodedToken.getUid()).thenReturn("test-user-id");
 
-            getAtmosphereFunction.service(request, response);
-        }
+        getAtmosphereFunction.service(request, response);
     }
 
     private void mockFirestore(boolean withData) throws Exception {
