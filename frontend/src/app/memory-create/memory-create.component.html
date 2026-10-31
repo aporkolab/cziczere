@@ -1,106 +1,156 @@
 <form [formGroup]="memoryForm" (ngSubmit)="onSubmit()" class="memory-form">
-  <textarea 
-    formControlName="text" 
-    placeholder="What beautiful memory will you plant today?" 
+  <textarea
+    formControlName="text"
+    placeholder="What beautiful memory will you plant today?"
     rows="4"
-    [disabled]="isLoading"></textarea>
-  
+    [disabled]="isLoading"
+  ></textarea>
+
   <!-- Form validation errors -->
-  <div *ngIf="memoryForm.controls.text.invalid && (memoryForm.controls.text.dirty || memoryForm.controls.text.touched)" class="error-message">
-    <small *ngIf="memoryForm.controls.text.errors?.['required']">A memory is required.</small>
-    <small *ngIf="memoryForm.controls.text.errors?.['minlength']">Please elaborate a bit more on your memory (at least 10 characters).</small>
-  </div>
-  
+  @if (
+    memoryForm.controls.text.invalid &&
+    (memoryForm.controls.text.dirty || memoryForm.controls.text.touched)
+  ) {
+    <div class="error-message">
+      @if (memoryForm.controls.text.errors?.["required"]) {
+        <small>A memory is required.</small>
+      }
+      @if (memoryForm.controls.text.errors?.["minlength"]) {
+        <small
+          >Please elaborate a bit more on your memory (at least 10
+          characters).</small
+        >
+      }
+    </div>
+  }
+
   <!-- API error message -->
-  <div *ngIf="error" class="error-message">
-    <small>{{ error }}</small>
-  </div>
-  
+  @if (error) {
+    <div class="error-message">
+      <small>{{ error }}</small>
+    </div>
+  }
+
   <div class="form-actions">
-    <button 
+    <button
       type="button"
       (click)="toggleCreativeAssistant()"
       class="assistant-button"
-      [disabled]="isLoading">
-      💡 {{ showCreativeAssistant ? 'Hide' : 'Need' }} Creative Help
+      [disabled]="isLoading"
+    >
+      💡 {{ showCreativeAssistant ? "Hide" : "Need" }} Creative Help
     </button>
-    
-    <button 
+
+    <button
       type="button"
       (click)="generatePoeticVersion()"
       class="poetic-button"
-      [disabled]="isLoading || assistantLoading || (memoryForm.get('text')?.value?.length || 0) < 10">
-      <span *ngIf="!assistantLoading">✨ Get AI Poetic Version</span>
-      <span *ngIf="assistantLoading">✨ Creating Magic...</span>
+      [disabled]="
+        isLoading ||
+        assistantLoading ||
+        (memoryForm.get('text')?.value?.length || 0) < 10
+      "
+    >
+      @if (!assistantLoading) {
+        <span>✨ Get AI Poetic Version</span>
+      }
+      @if (assistantLoading) {
+        <span>✨ Creating Magic...</span>
+      }
     </button>
-    
-    <button 
-      type="submit" 
+
+    <button
+      type="submit"
       [disabled]="memoryForm.invalid || isLoading"
-      class="submit-button">
-      <span *ngIf="!isLoading">🌱 Plant Memory Seed</span>
-      <span *ngIf="isLoading">🌱 Planting...</span>
+      class="submit-button"
+    >
+      @if (!isLoading) {
+        <span>🌱 Plant Memory Seed</span>
+      }
+      @if (isLoading) {
+        <span>🌱 Planting...</span>
+      }
     </button>
   </div>
 </form>
 
 <!-- Creative Assistant Panel -->
-<div *ngIf="showCreativeAssistant" class="creative-assistant">
-  <div class="assistant-header">
-    <h3>🌸 Creative Assistant</h3>
-    <button type="button" (click)="hideCreativeAssistant()" class="close-button">✕</button>
-  </div>
-  
-  <div class="assistant-content">
-    <p *ngIf="assistantLoading" class="loading">Thinking of inspiration...</p>
-    
-    <div *ngIf="!assistantLoading && assistantSuggestion" class="suggestion">
-      <p><em>{{ assistantSuggestion }}</em></p>
-      <button 
-        type="button" 
-        (click)="useAssistantSuggestion()" 
-        class="use-suggestion-button">
-        ✨ Use This Suggestion
-      </button>
-      <button 
-        type="button" 
-        (click)="generateSuggestion()" 
-        class="refresh-button">
-        🔄 Get Another Idea
+@if (showCreativeAssistant) {
+  <div class="creative-assistant">
+    <div class="assistant-header">
+      <h3>🌸 Creative Assistant</h3>
+      <button
+        type="button"
+        (click)="hideCreativeAssistant()"
+        class="close-button"
+      >
+        ✕
       </button>
     </div>
+    <div class="assistant-content">
+      @if (assistantLoading) {
+        <p class="loading">Thinking of inspiration...</p>
+      }
+      @if (!assistantLoading && assistantSuggestion) {
+        <div class="suggestion">
+          <p>
+            <em>{{ assistantSuggestion }}</em>
+          </p>
+          <button
+            type="button"
+            (click)="useAssistantSuggestion()"
+            class="use-suggestion-button"
+          >
+            ✨ Use This Suggestion
+          </button>
+          <button
+            type="button"
+            (click)="generateSuggestion()"
+            class="refresh-button"
+          >
+            🔄 Get Another Idea
+          </button>
+        </div>
+      }
+    </div>
   </div>
-</div>
+}
 
 <!-- AI Poetic Rephrasing Panel -->
-<div *ngIf="showPoeticOption && poeticRephrasing" class="poetic-panel">
-  <div class="panel-header">
-    <h3>✨ AI Enhanced Version</h3>
-    <button type="button" (click)="hidePoeticOption()" class="close-button">✕</button>
-  </div>
-  
-  <div class="poetic-content">
-    <div class="original-vs-poetic">
-      <div class="poetic-version">
-        <p class="poetic-text">{{ poeticRephrasing.poeticVersion }}</p>
-        <small class="suggestion-text">{{ poeticRephrasing.suggestion }}</small>
+@if (showPoeticOption && poeticRephrasing) {
+  <div class="poetic-panel">
+    <div class="panel-header">
+      <h3>✨ AI Enhanced Version</h3>
+      <button type="button" (click)="hidePoeticOption()" class="close-button">
+        ✕
+      </button>
+    </div>
+    <div class="poetic-content">
+      <div class="original-vs-poetic">
+        <div class="poetic-version">
+          <p class="poetic-text">{{ poeticRephrasing.poeticVersion }}</p>
+          <small class="suggestion-text">{{
+            poeticRephrasing.suggestion
+          }}</small>
+        </div>
+      </div>
+      <div class="poetic-actions">
+        <button
+          type="button"
+          (click)="usePoeticVersion()"
+          class="use-poetic-button"
+        >
+          ✨ Use This Beautiful Version
+        </button>
+        <button
+          type="button"
+          (click)="generatePoeticVersion()"
+          class="regenerate-button"
+          [disabled]="assistantLoading"
+        >
+          🔄 Try Another Style
+        </button>
       </div>
     </div>
-    
-    <div class="poetic-actions">
-      <button 
-        type="button" 
-        (click)="usePoeticVersion()" 
-        class="use-poetic-button">
-        ✨ Use This Beautiful Version
-      </button>
-      <button 
-        type="button" 
-        (click)="generatePoeticVersion()" 
-        class="regenerate-button"
-        [disabled]="assistantLoading">
-        🔄 Try Another Style
-      </button>
-    </div>
   </div>
-</div>
+}

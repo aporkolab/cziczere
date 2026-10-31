@@ -1,33 +1,45 @@
 <div class="overlay" (click)="onClose()">
   <div class="detail-card" (click)="$event.stopPropagation()">
     <button class="close-button" (click)="onClose()">×</button>
-    <div *ngIf="memory">
-      <img [src]="memory.imageUrl" alt="Memory visualization" class="detail-image">
-      <h2>Your Memory</h2>
-      <p class="memory-text">{{ memory.userText }}</p>
-
-      <div *ngIf="emotionsArray.length > 0" class="emotions-section">
-        <h3>Detected Emotions</h3>
-        <ul>
-          <li *ngFor="let emotion of emotionsArray">
-            <span class="emotion-name">{{ emotion[0] }}</span>
-            <div class="emotion-bar-container">
-              <div class="emotion-bar" [style.width.%]="emotion[1] * 100"></div>
-            </div>
-            <span class="emotion-score">{{ (emotion[1] * 100).toFixed(0) }}%</span>
-          </li>
-        </ul>
+    @if (memory) {
+      <div>
+        <img
+          [src]="memory.imageUrl"
+          alt="Memory visualization"
+          class="detail-image"
+        />
+        <h2>Your Memory</h2>
+        <p class="memory-text">{{ memory.userText }}</p>
+        @if (emotionsArray.length > 0) {
+          <div class="emotions-section">
+            <h3>Detected Emotions</h3>
+            <ul>
+              @for (emotion of emotionsArray; track emotion) {
+                <li>
+                  <span class="emotion-name">{{ emotion[0] }}</span>
+                  <div class="emotion-bar-container">
+                    <div
+                      class="emotion-bar"
+                      [style.width.%]="emotion[1] * 100"
+                    ></div>
+                  </div>
+                  <span class="emotion-score"
+                    >{{ (emotion[1] * 100).toFixed(0) }}%</span
+                  >
+                </li>
+              }
+            </ul>
+          </div>
+        }
+        <div class="prompt-section">
+          <h3>AI Image Prompt</h3>
+          <p class="prompt-text">{{ memory.imagePrompt }}</p>
+        </div>
+        <p class="timestamp">{{ memory.timestamp | date: "full" }}</p>
+        <div class="actions">
+          <button class="ar-button" (click)="onEnterAr()">Place in AR</button>
+        </div>
       </div>
-
-      <div class="prompt-section">
-        <h3>AI Image Prompt</h3>
-        <p class="prompt-text">{{ memory.imagePrompt }}</p>
-      </div>
-
-      <p class="timestamp">{{ memory.timestamp | date:'full' }}</p>
-      <div class="actions">
-        <button class="ar-button" (click)="onEnterAr()">Place in AR</button>
-      </div>
-    </div>
+    }
   </div>
 </div>

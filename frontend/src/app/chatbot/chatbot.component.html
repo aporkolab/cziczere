@@ -6,136 +6,183 @@
       <div class="info">
         <h3>Gardener's Assistant</h3>
         <p class="status">
-          <span class="connection-indicator" [class.connected]="isConnected$ | async"></span>
-          {{ (isConnected$ | async) ? 'Online' : 'Reconnecting...' }}
+          <span
+            class="connection-indicator"
+            [class.connected]="isConnected$ | async"
+          ></span>
+          {{ (isConnected$ | async) ? "Online" : "Reconnecting..." }}
         </p>
       </div>
     </div>
-    
+
     <div class="header-actions">
-      <button class="icon-button" (click)="requestMemoryAnalysis()" title="Analyze Recent Memories">
+      <button
+        class="icon-button"
+        (click)="requestMemoryAnalysis()"
+        title="Analyze Recent Memories"
+      >
         🔍
       </button>
-      <button class="icon-button" (click)="exportConversation()" title="Export Conversation">
+      <button
+        class="icon-button"
+        (click)="exportConversation()"
+        title="Export Conversation"
+      >
         💾
       </button>
       <button class="minimize-button" (click)="toggleChatMinimized()">
-        {{ isChatMinimized ? '⬆️' : '⬇️' }}
+        {{ isChatMinimized ? "⬆️" : "⬇️" }}
       </button>
     </div>
   </div>
 
   <!-- Messages Container -->
   <div #messagesContainer class="messages-container" [@messageAnimation]>
-    <div *ngFor="let message of messages$ | async; trackBy: trackMessage" 
-         class="message-wrapper" 
-         [class.user]="message.sender === 'user'"
-         [class.assistant]="message.sender === 'assistant'">
-      
-      <div class="message" [class.typing]="message.sender === 'assistant' && (isTyping$ | async)">
-        <!-- Assistant Avatar -->
-        <div *ngIf="message.sender === 'assistant'" class="message-avatar">
-          <div class="avatar-small">🌸</div>
-        </div>
-
-        <!-- Message Content -->
-        <div class="message-content" [ngClass]="'type-' + message.type">
-          <!-- Special message types -->
-          <div *ngIf="message.type === 'insight'" class="insight-message">
-            <div class="insight-header">
-              <span class="insight-icon">✨</span>
-              <span class="insight-label">Garden Insight</span>
+    @for (message of messages$ | async; track trackMessage($index, message)) {
+      <div
+        class="message-wrapper"
+        [class.user]="message.sender === 'user'"
+        [class.assistant]="message.sender === 'assistant'"
+      >
+        <div
+          class="message"
+          [class.typing]="message.sender === 'assistant' && (isTyping$ | async)"
+        >
+          <!-- Assistant Avatar -->
+          @if (message.sender === "assistant") {
+            <div class="message-avatar">
+              <div class="avatar-small">🌸</div>
             </div>
-            <div class="insight-content">{{ message.content }}</div>
-          </div>
-
-          <div *ngIf="message.type === 'memory_analysis'" class="analysis-message">
-            <div class="analysis-header">
-              <span class="analysis-icon">🧠</span>
-              <span class="analysis-label">Memory Analysis</span>
+          }
+          <!-- Message Content -->
+          <div class="message-content" [ngClass]="'type-' + message.type">
+            <!-- Special message types -->
+            @if (message.type === "insight") {
+              <div class="insight-message">
+                <div class="insight-header">
+                  <span class="insight-icon">✨</span>
+                  <span class="insight-label">Garden Insight</span>
+                </div>
+                <div class="insight-content">{{ message.content }}</div>
+              </div>
+            }
+            @if (message.type === "memory_analysis") {
+              <div class="analysis-message">
+                <div class="analysis-header">
+                  <span class="analysis-icon">🧠</span>
+                  <span class="analysis-label">Memory Analysis</span>
+                </div>
+                <div class="analysis-content">{{ message.content }}</div>
+              </div>
+            }
+            <!-- Regular text message -->
+            @if (message.type === "text") {
+              <div class="text-message">
+                {{ message.content }}
+              </div>
+            }
+            <!-- Message metadata -->
+            <div class="message-meta">
+              <span class="timestamp">{{
+                message.timestamp | date: "short"
+              }}</span>
             </div>
-            <div class="analysis-content">{{ message.content }}</div>
           </div>
-
-          <!-- Regular text message -->
-          <div *ngIf="message.type === 'text'" class="text-message">
-            {{ message.content }}
-          </div>
-
-          <!-- Message metadata -->
-          <div class="message-meta">
-            <span class="timestamp">{{ message.timestamp | date:'short' }}</span>
-          </div>
-        </div>
-
-        <!-- User Avatar -->
-        <div *ngIf="message.sender === 'user'" class="message-avatar user-avatar">
-          <div class="avatar-small user">👤</div>
+          <!-- User Avatar -->
+          @if (message.sender === "user") {
+            <div class="message-avatar user-avatar">
+              <div class="avatar-small user">👤</div>
+            </div>
+          }
         </div>
       </div>
-    </div>
+    }
 
     <!-- Typing Indicator -->
-    <div *ngIf="isTyping$ | async" class="typing-indicator" [@typingIndicator]>
-      <div class="message-wrapper assistant">
-        <div class="message-avatar">
-          <div class="avatar-small">🌸</div>
-        </div>
-        <div class="typing-animation">
-          <div class="typing-dots">
-            <span></span>
-            <span></span>
-            <span></span>
+    @if (isTyping$ | async) {
+      <div class="typing-indicator" [@typingIndicator]>
+        <div class="message-wrapper assistant">
+          <div class="message-avatar">
+            <div class="avatar-small">🌸</div>
           </div>
-          <span class="typing-text">Assistant is thinking...</span>
+          <div class="typing-animation">
+            <div class="typing-dots">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            <span class="typing-text">Assistant is thinking...</span>
+          </div>
         </div>
       </div>
-    </div>
+    }
   </div>
 
   <!-- Quick Suggestions -->
-  <div *ngIf="currentSuggestions.length > 0" class="suggestions-container">
-    <div class="suggestions-header">
-      <span class="suggestions-label">💭 Try asking:</span>
+  @if (currentSuggestions.length > 0) {
+    <div class="suggestions-container">
+      <div class="suggestions-header">
+        <span class="suggestions-label">💭 Try asking:</span>
+      </div>
+      <div class="suggestions-list">
+        @for (suggestion of currentSuggestions; track suggestion) {
+          <button class="suggestion-pill" (click)="useSuggestion(suggestion)">
+            {{ suggestion }}
+          </button>
+        }
+      </div>
     </div>
-    <div class="suggestions-list">
-      <button *ngFor="let suggestion of currentSuggestions" 
-              class="suggestion-pill"
-              (click)="useSuggestion(suggestion)">
-        {{ suggestion }}
-      </button>
-    </div>
-  </div>
+  }
 
   <!-- Input Area -->
   <div class="input-container">
-    <form [formGroup]="messageForm" (ngSubmit)="sendMessage()" class="message-form">
+    <form
+      [formGroup]="messageForm"
+      (ngSubmit)="sendMessage()"
+      class="message-form"
+    >
       <div class="input-wrapper">
-        <textarea #messageInput
-                  formControlName="message"
-                  placeholder="Share your thoughts with the Gardener's Assistant..."
-                  class="message-input"
-                  rows="1"
-                  (keydown)="onKeyDown($event)"
-                  [disabled]="!(isConnected$ | async)">
+        <textarea
+          #messageInput
+          formControlName="message"
+          placeholder="Share your thoughts with the Gardener's Assistant..."
+          class="message-input"
+          rows="1"
+          (keydown)="onKeyDown($event)"
+          [disabled]="!(isConnected$ | async)"
+        >
         </textarea>
-        
-        <button type="submit" 
-                class="send-button"
-                [disabled]="messageForm.invalid || !(isConnected$ | async) || (isTyping$ | async)"
-                title="Send message">
-          <span *ngIf="!(isTyping$ | async)">🚀</span>
-          <span *ngIf="isTyping$ | async" class="loading-spinner">⏳</span>
+
+        <button
+          type="submit"
+          class="send-button"
+          [disabled]="
+            messageForm.invalid ||
+            !(isConnected$ | async) ||
+            (isTyping$ | async)
+          "
+          title="Send message"
+        >
+          @if (!(isTyping$ | async)) {
+            <span>🚀</span>
+          }
+          @if (isTyping$ | async) {
+            <span class="loading-spinner">⏳</span>
+          }
         </button>
       </div>
-      
+
       <!-- Character counter -->
       <div class="input-meta">
-        <span class="char-counter" 
-              [class.warning]="(messageForm.get('message')?.value?.length || 0) > 400">
-          {{ messageForm.get('message')?.value?.length || 0 }}/500
+        <span
+          class="char-counter"
+          [class.warning]="
+            (messageForm.get('message')?.value?.length || 0) > 400
+          "
+        >
+          {{ messageForm.get("message")?.value?.length || 0 }}/500
         </span>
-        
+
         <span class="input-hint">
           Press Enter to send, Shift+Enter for new line
         </span>
@@ -144,20 +191,27 @@
   </div>
 
   <!-- Connection Status -->
-  <div *ngIf="!(isConnected$ | async)" class="connection-status">
-    <div class="reconnecting-indicator">
-      <span class="reconnect-spinner">🔄</span>
-      <span>Reconnecting to the Garden...</span>
+  @if (!(isConnected$ | async)) {
+    <div class="connection-status">
+      <div class="reconnecting-indicator">
+        <span class="reconnect-spinner">🔄</span>
+        <span>Reconnecting to the Garden...</span>
+      </div>
     </div>
-  </div>
+  }
 </div>
 
 <!-- Chat Toggle Button (when minimized) -->
-<button *ngIf="isChatMinimized" 
-        class="chat-toggle-button"
-        (click)="toggleChatMinimized()"
-        title="Open Gardener's Assistant">
-  <span class="toggle-icon">🌸</span>
-  <span class="toggle-text">Chat</span>
-  <span *ngIf="(messages$ | async)?.length > 1" class="unread-indicator">•</span>
-</button>
+@if (isChatMinimized) {
+  <button
+    class="chat-toggle-button"
+    (click)="toggleChatMinimized()"
+    title="Open Gardener's Assistant"
+  >
+    <span class="toggle-icon">🌸</span>
+    <span class="toggle-text">Chat</span>
+    @if ((messages$ | async)?.length > 1) {
+      <span class="unread-indicator">•</span>
+    }
+  </button>
+}
