@@ -2,10 +2,11 @@ import { Injectable, inject, OnDestroy } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Auth, idToken, user } from '@angular/fire/auth';
 import { Firestore, collection, collectionData, query, where, orderBy, limit, onSnapshot, deleteDoc, doc, updateDoc, Unsubscribe } from '@angular/fire/firestore';
-import { switchMap, first, Observable, of, map, BehaviorSubject, startWith, shareReplay } from 'rxjs';
+import { switchMap, first, Observable, of, map, BehaviorSubject } from 'rxjs';
 import { environment } from '../environments/environment';
 
 export interface MemoryData {
+  id?: string;
   userId: string;
   userText: string;
   imagePrompt: string;
@@ -47,11 +48,12 @@ export interface GardenState {
   error: string | null;
 }
 
-export interface RealTimeUpdate {
-  type: 'memory_added' | 'memory_updated' | 'memory_deleted' | 'insight_added' | 'atmosphere_changed';
-  data: any;
-  timestamp: Date;
-}
+export type RealTimeUpdate = { timestamp: Date } & (
+  | { type: 'memory_added'; data: MemoryData }
+  | { type: 'memory_updated' | 'insight_added'; data: { count: number } }
+  | { type: 'memory_deleted'; data: { id: string } }
+  | { type: 'atmosphere_changed'; data: AtmosphereData }
+);
 
 @Injectable({
   providedIn: 'root'
@@ -233,13 +235,10 @@ export class ApiService implements OnDestroy {
 
     this.memoriesUnsubscribe = onSnapshot(memoriesQuery, 
       (snapshot) => {
-        const memories: MemoryData[] = [];
-        snapshot.forEach(doc => {
-          const data = doc.data();
-          if (data) {
-            memories.push({ ...(data as any), id: doc.id } as MemoryData);
-          }
-        });
+        const memories = snapshot.docs.map(doc => ({
+          ...(doc.data() as MemoryData),
+          id: doc.id
+        }));
         
         this.updateGardenState({
           memories,

@@ -1,5 +1,5 @@
 import { Injectable, inject, NgZone } from '@angular/core';
-import { BehaviorSubject, Observable, fromEvent, map, startWith } from 'rxjs';
+import { BehaviorSubject } from 'rxjs';
 import { environment } from '../../../environments/environment';
 import { GardenStateService } from '../state/garden-state.service';
 
@@ -124,7 +124,7 @@ export class PerformanceService {
       
       try {
         this.longTaskObserver.observe({ entryTypes: ['longtask'] });
-      } catch (e) {
+      } catch {
         console.warn('Long task observer not supported');
       }
 
@@ -139,7 +139,7 @@ export class PerformanceService {
       
       try {
         perfObserver.observe({ entryTypes: ['navigation', 'resource'] });
-      } catch (e) {
+      } catch {
         console.warn('Performance observer not fully supported');
       }
     }
@@ -277,7 +277,7 @@ export class PerformanceService {
 
   private getMemoryInfo(): MemoryInfo | null {
     if ('memory' in performance) {
-      const memory = (performance as any).memory;
+      const memory = performance.memory as MemoryInfo;
       return {
         usedJSHeapSize: memory.usedJSHeapSize,
         totalJSHeapSize: memory.totalJSHeapSize,

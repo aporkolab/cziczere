@@ -1,19 +1,23 @@
 import { Injectable, inject } from '@angular/core';
 import { BehaviorSubject, Observable, Subject, interval, timer } from 'rxjs';
 import { WebSocketSubject, webSocket } from 'rxjs/webSocket';
-import { takeUntil, retry, retryWhen, delay, tap, catchError } from 'rxjs/operators';
-import { Auth, idToken, user } from '@angular/fire/auth';
+import { takeUntil, retry, catchError } from 'rxjs/operators';
+import { Auth, idToken } from '@angular/fire/auth';
 import { environment } from '../../environments/environment';
-import { ChatMessage, ConversationContext } from '../chatbot/chatbot.component';
+import type { ChatMessage, ConversationContext } from '../chatbot/chatbot.component';
 
-export interface WebSocketMessage {
-  type: 'message' | 'typing' | 'suggestions' | 'system' | 'heartbeat';
-  payload: any;
+export type WebSocketMessage = {
   timestamp: number;
   messageId?: string;
   userId?: string;
-  token?: string;
-}
+  token?: string | null;
+} & (
+  | { type: 'message'; payload: ChatMessage | { message: ChatMessage; context: Omit<ConversationContext, 'userPreferences'> } }
+  | { type: 'typing'; payload: { isTyping: boolean; userId?: string } }
+  | { type: 'suggestions'; payload: { suggestions: string[] } | { action: 'request'; context: { currentMood: string; recentTopics: string[] } } }
+  | { type: 'system'; payload: { message: string } | { action: 'sync_history'; messages: ChatMessage[] } }
+  | { type: 'heartbeat'; payload: { timestamp: number } }
+);
 
 interface WebSocketConfig {
   url: string;
@@ -203,7 +207,7 @@ export class WebSocketService {
     
     this.socket$ = webSocket<WebSocketMessage>({
       url: wsUrl,
-      protocols: this.config.protocols,
+      protocol: this.config.protocols,
       openObserver: {
         next: () => {
           console.log('✅ WebSocket connected successfully');
@@ -245,22 +249,28 @@ export class WebSocketService {
   }
 
   private handleIncomingMessage(wsMessage: WebSocketMessage): void {
-    switch (wsMessage.type) {
+    const { type, payload } = wsMessage;
+    switch (type) {
       case 'message':
-        const chatMessage = wsMessage.payload as ChatMessage;
-        this.incomingMessages$.next(chatMessage);
+        if ('sender' in payload) {
+          this.incomingMessages$.next(payload);
+        }
         break;
 
       case 'typing':
-        this.typingIndicator$.next(wsMessage.payload.isTyping);
+        this.typingIndicator$.next(payload.isTyping);
         break;
 
       case 'suggestions':
-        this.suggestions$.next(wsMessage.payload.suggestions);
+        if ('suggestions' in payload) {
+          this.suggestions$.next(payload.suggestions);
+        }
         break;
 
       case 'system':
-        this.systemMessages$.next(wsMessage.payload.message);
+        if ('message' in payload) {
+          this.systemMessages$.next(payload.message);
+        }
         break;
 
       case 'heartbeat':
@@ -268,7 +278,7 @@ export class WebSocketService {
         break;
 
       default:
-        console.warn('Unknown WebSocket message type:', wsMessage.type);
+        console.warn('Unknown WebSocket message type:', type);
     }
   }
 
