@@ -1,29 +1,35 @@
-<div class="insight-container" *ngIf="insight || isLoading || error">
-  <div *ngIf="isLoading" class="loading-spinner">
-    <p>Your Gardener's Assistant is reflecting...</p>
-    <div class="spinner"></div>
+@if (insight || isLoading || error) {
+  <div class="insight-container">
+    @if (isLoading) {
+      <div class="loading-spinner">
+        <p>Your Gardener's Assistant is reflecting...</p>
+        <div class="spinner"></div>
+      </div>
+    }
+    @if (error) {
+      <div class="error-message">
+        <p>{{ error }}</p>
+      </div>
+    }
+    @if (insight && !isLoading) {
+      <div class="insight-content fade-in">
+        <p class="quote">“</p>
+        <p class="insight-text">{{ insight.text }}</p>
+        <div class="insight-footer">
+          <p class="timestamp">{{ insight.timestamp | date: "medium" }}</p>
+          <button
+            class="listen-button"
+            (click)="playInsightAudio(insight.id)"
+            [disabled]="(isAudioLoading$ | async) === true"
+          >
+            @if (!(isAudioLoading$ | async)) {
+              Listen 🔊
+            } @else {
+              <div class="spinner-small"></div>
+            }
+          </button>
+        </div>
+      </div>
+    }
   </div>
-
-  <div *ngIf="error" class="error-message">
-    <p>{{ error }}</p>
-  </div>
-
-  <div *ngIf="insight && !isLoading" class="insight-content fade-in">
-    <p class="quote">“</p>
-    <p class="insight-text">{{ insight.text }}</p>
-    <div class="insight-footer">
-      <p class="timestamp">{{ insight.timestamp | date:'medium' }}</p>
-      <button
-        class="listen-button"
-        (click)="playInsightAudio(insight.id)"
-        [disabled]="(isAudioLoading$ | async) === true">
-        <ng-container *ngIf="!(isAudioLoading$ | async); else audioLoading">
-          Listen 🔊
-        </ng-container>
-        <ng-template #audioLoading>
-          <div class="spinner-small"></div>
-        </ng-template>
-      </button>
-    </div>
-  </div>
-</div>
+}
