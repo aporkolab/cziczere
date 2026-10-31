@@ -16,12 +16,12 @@ env:
   NODE_VERSION: '24'
   NG_CLI_ANALYTICS: 'false'
   JAVA_VERSION: '21'
-  FIREBASE_PROJECT_ID: 'cziczere-ai'
+  FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID || 'cziczere-ai' }}
 
 jobs:
   # Quality checks and testing
   quality-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     
     steps:
       - name: Checkout code
@@ -40,7 +40,7 @@ jobs:
 
       - name: Lint frontend code
         working-directory: ./frontend
-        run: npm run lint
+        run: npm run lint -- --max-warnings=0
 
       - name: Type check
         working-directory: ./frontend
@@ -58,7 +58,7 @@ jobs:
       #     name: frontend-coverage
 
   backend-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: functions
@@ -73,7 +73,7 @@ jobs:
         run: mvn -B verify
 
   firebase-tools-check:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     defaults:
       run:
         working-directory: functions/frontend
@@ -91,7 +91,7 @@ jobs:
 
   # Security scanning
   security-scan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     env:
       SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
@@ -136,6 +136,9 @@ jobs:
 
       - name: CodeQL Analysis
         uses: github/codeql-action/init@v4
+        env:
+          # The Maven-traced Java build requires a full CodeQL database.
+          CODEQL_OVERLAY_DATABASE_MODE: none
         with:
           languages: javascript, java
           
@@ -148,7 +151,7 @@ jobs:
 
   # Backend testing and deployment
   deploy-backend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [quality-check, backend-test, security-scan, firebase-tools-check]
     if: github.ref == 'refs/heads/main'
 
@@ -156,25 +159,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Setup Java
-        uses: actions/setup-java@v6
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
-          cache: maven
-
-      - name: Test Cloud Functions
-        working-directory: ./functions
-        run: mvn test
-
-      - name: Build Cloud Functions
-        working-directory: ./functions
-        run: mvn clean package
-
       - name: Authenticate to Google Cloud
-        id: auth
         uses: google-github-actions/auth@v3
         with:
+          project_id: ${{ env.FIREBASE_PROJECT_ID }}
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up Cloud SDK
@@ -182,42 +170,49 @@ jobs:
         with:
           project_id: ${{ env.FIREBASE_PROJECT_ID }}
 
-      - name: Install Firebase CLI
-        run: npm install -g firebase-tools
-
-      - name: Verify authentication and project access
+      - name: Deploy Java HTTP functions
+        env:
+          STORAGE_BUCKET: ${{ vars.FUNCTIONS_STORAGE_BUCKET || secrets.FIREBASE_STORAGE_BUCKET }}
+          VERTEX_LOCATION: ${{ vars.VERTEX_LOCATION || 'global' }}
+          TEXT_MODEL: ${{ vars.GEMINI_MODEL || 'gemini-3.1-flash-lite' }}
+          IMAGE_MODEL: ${{ vars.IMAGEN_MODEL || 'gemini-3.1-flash-image' }}
+        shell: bash
         run: |
-          echo "Checking authentication..."
-          gcloud auth list
-          echo "Current service account:"
-          gcloud config get-value account
-          echo "Checking project access..."
-          if gcloud projects describe ${{ env.FIREBASE_PROJECT_ID }}; then
-            echo "✅ Project access verified"
-          else
-            echo "❌ Cannot access project - check service account permissions"
-            echo "Service account needs these roles:"
-            echo "  - Editor or Project Editor"
-            echo "  - Firebase Admin"
-            echo "  - Cloud Functions Admin"
-            echo "  - Service Usage Admin"
-            exit 1
-          fi
-          echo "Checking Firebase project access..."
-          if firebase projects:list; then
-            echo "✅ Firebase access verified"
-          else
-            echo "❌ Cannot access Firebase - check service account has Firebase Admin role"
-            exit 1
-          fi
+          set -euo pipefail
+          source_dir=$(mktemp -d "$RUNNER_TEMP/cziczere-functions.XXXXXX")
+          mkdir "$source_dir/src"
+          cp functions/pom.xml "$source_dir/"
+          cp -R functions/src/main "$source_dir/src/"
+          existing=$(gcloud functions list --v2 --regions=us-central1 --project="$FIREBASE_PROJECT_ID" --format='value(name.basename())')
 
-      - name: Deploy Cloud Functions
-        run: |
-          firebase deploy --only functions --project ${{ env.FIREBASE_PROJECT_ID }}
+          for class in GenerateMemoryPlant AnalyzeMemories GetAtmosphere ExportGarden GetInsightAudio PoeticRephrasing; do
+            name="${class,}"
+            settings="GCP_PROJECT_ID=$FIREBASE_PROJECT_ID"
+            access=()
+            if ! grep -Fxq "$name" <<< "$existing"; then
+              if [[ -z "$STORAGE_BUCKET" ]]; then
+                # Firebase's Admin SDK config contains the project's actual default bucket.
+                STORAGE_BUCKET=$(curl -fsS --header "Authorization: Bearer $(gcloud auth print-access-token)" \
+                  "https://firebase.googleapis.com/v1beta1/projects/$FIREBASE_PROJECT_ID/adminSdkConfig" |
+                  jq -er '.storageBucket | strings | select(length > 0)') || {
+                    echo "::error::No default Firebase Storage bucket found. Configure Firebase Storage or set FUNCTIONS_STORAGE_BUCKET."
+                    exit 1
+                  }
+              fi
+              settings+="|GCP_REGION=$VERTEX_LOCATION|GEMINI_MODEL=$TEXT_MODEL|IMAGEN_MODEL=$IMAGE_MODEL"
+              settings+="|GCS_BUCKET_NAME=$STORAGE_BUCKET|INSIGHT_AUDIO_BUCKET=$STORAGE_BUCKET|FIREBASE_MEDIA_LINKS=true"
+              settings+="|ALLOWED_ORIGINS=https://$FIREBASE_PROJECT_ID.web.app,https://$FIREBASE_PROJECT_ID.firebaseapp.com"
+              # Browsers send Firebase ID tokens, which each handler verifies.
+              access+=(--allow-unauthenticated)
+            fi
+            gcloud functions deploy "$name" --project="$FIREBASE_PROJECT_ID" --region=us-central1 \
+              --gen2 --runtime=java21 --entry-point="com.cziczere.functions.$class" --source="$source_dir" \
+              --trigger-http --update-env-vars="^|^$settings" "${access[@]}" --quiet --format='value(name)'
+          done
 
   # Frontend build and deployment
   deploy-frontend:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [quality-check, backend-test, security-scan, firebase-tools-check]
     if: github.ref == 'refs/heads/main'
 
@@ -230,60 +225,56 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: |
+            frontend/package-lock.json
+            functions/frontend/package-lock.json
 
       - name: Install dependencies
         working-directory: ./frontend
         run: npm ci
 
+      - name: Install the locked Firebase CLI
+        working-directory: ./functions/frontend
+        run: npm ci
+
       - name: Create production environment
+        id: config
         working-directory: ./frontend/src/environments
+        env:
+          WEB_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+          WEB_AUTH_DOMAIN: ${{ secrets.FIREBASE_AUTH_DOMAIN }}
+          WEB_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+          WEB_STORAGE_BUCKET: ${{ secrets.FIREBASE_STORAGE_BUCKET }}
+          WEB_SENDER_ID: ${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}
+          WEB_APP_ID: ${{ secrets.FIREBASE_APP_ID }}
+          SENTRY_DSN: ${{ secrets.SENTRY_DSN }}
+          WEBSOCKET_DOMAIN: ${{ secrets.WEBSOCKET_DOMAIN }}
         run: |
-          cat > environment.prod.ts << EOF
-          export const environment = {
-            production: true,
-            firebase: {
-              apiKey: '${{ secrets.FIREBASE_API_KEY }}',
-              authDomain: '${{ secrets.FIREBASE_AUTH_DOMAIN }}',
-              projectId: '${{ secrets.FIREBASE_PROJECT_ID }}',
-              storageBucket: '${{ secrets.FIREBASE_STORAGE_BUCKET }}',
-              messagingSenderId: '${{ secrets.FIREBASE_MESSAGING_SENDER_ID }}',
-              appId: '${{ secrets.FIREBASE_APP_ID }}'
-            },
-            apis: {
-              generateMemoryPlant: 'https://us-central1-${{ env.FIREBASE_PROJECT_ID }}.cloudfunctions.net/generateMemoryPlant',
-              analyzeMemories: 'https://us-central1-${{ env.FIREBASE_PROJECT_ID }}.cloudfunctions.net/analyzeMemories',
-              getAtmosphere: 'https://us-central1-${{ env.FIREBASE_PROJECT_ID }}.cloudfunctions.net/getAtmosphere',
-              exportGarden: 'https://us-central1-${{ env.FIREBASE_PROJECT_ID }}.cloudfunctions.net/exportGarden',
-              getInsightAudio: 'https://us-central1-${{ env.FIREBASE_PROJECT_ID }}.cloudfunctions.net/getInsightAudio',
-              poeticRephrasing: 'https://us-central1-${{ env.FIREBASE_PROJECT_ID }}.cloudfunctions.net/poeticRephrasing',
-              chatWebSocket: 'wss://${{ secrets.WEBSOCKET_DOMAIN }}/chat'
-            },
-            features: {
-              enableAnalytics: true,
-              enablePerformanceMonitoring: true,
-              enableCrashlytics: true,
-              enableNotifications: true,
-              maxMemoriesPerUser: 1000,
-              maxConversationHistory: 100,
-              enableAdvancedAR: true,
-              enableProfanityFilter: true,
-              enableRateLimiting: true
-            },
-            monitoring: {
-              sentryDsn: '${{ secrets.SENTRY_DSN }}',
-              logLevel: 'warn',
-              enableUserTracking: true,
-              enableErrorReporting: true
-            },
-            performance: {
-              enableServiceWorker: true,
-              enableLazyLoading: true,
-              enableImageOptimization: true,
-              enableBundleAnalysis: false
-            }
-          };
-          EOF
+          node --input-type=module <<'JS'
+          import { appendFileSync, writeFileSync } from 'node:fs';
+          import { environment } from './environment.prod.ts';
+          const env = process.env;
+          const projectId = env.FIREBASE_PROJECT_ID;
+          if (env.WEB_PROJECT_ID && env.WEB_PROJECT_ID !== projectId) {
+            throw new Error('The Firebase web app and Hosting deployment must use the same project.');
+          }
+          const web = { apiKey: env.WEB_API_KEY, authDomain: env.WEB_AUTH_DOMAIN,
+            storageBucket: env.WEB_STORAGE_BUCKET, messagingSenderId: env.WEB_SENDER_ID, appId: env.WEB_APP_ID };
+          if ([web.apiKey, web.authDomain, web.messagingSenderId, web.appId].some(Boolean)) {
+            if (!Object.values(web).every(Boolean)) throw new Error('Incomplete Firebase web SDK configuration.');
+            environment.firebase = { ...web, projectId };
+          } else {
+            environment.firebase = { projectId };
+            environment.firebaseConfigUrl = '/__/firebase/init.json';
+            appendFileSync(env.GITHUB_OUTPUT, 'use_hosting_config=true\n');
+          }
+          for (const [key, url] of Object.entries(environment.apis)) {
+            environment.apis[key] = url.replace('YOUR_PROJECT_ID', projectId);
+          }
+          if (env.WEBSOCKET_DOMAIN) environment.apis.chatWebSocket = `wss://${env.WEBSOCKET_DOMAIN}/chat`;
+          environment.monitoring.sentryDsn = env.SENTRY_DSN || '';
+          writeFileSync('environment.prod.ts', 'export const environment = ' + JSON.stringify(environment, null, 2) + ';\n');
+          JS
 
       - name: Build for production
         working-directory: ./frontend
@@ -305,49 +296,31 @@ jobs:
         uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
-
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v3
-        with:
           project_id: ${{ env.FIREBASE_PROJECT_ID }}
 
-      - name: Install Firebase CLI
-        run: npm install -g firebase-tools
-
-      - name: Verify authentication and project access
+      - name: Verify Hosting has a registered Firebase web app
+        if: steps.config.outputs.use_hosting_config == 'true'
         run: |
-          echo "Checking authentication..."
-          gcloud auth list
-          echo "Current service account:"
-          gcloud config get-value account
-          echo "Checking project access..."
-          if gcloud projects describe ${{ env.FIREBASE_PROJECT_ID }}; then
-            echo "✅ Project access verified"
-          else
-            echo "❌ Cannot access project - check service account permissions"
-            echo "Service account needs these roles:"
-            echo "  - Editor or Project Editor"
-            echo "  - Firebase Admin"
-            echo "  - Firebase Hosting Admin"
-            echo "  - Service Usage Admin"
-            exit 1
-          fi
-          echo "Checking Firebase project access..."
-          if firebase projects:list; then
-            echo "✅ Firebase access verified"
-          else
-            echo "❌ Cannot access Firebase - check service account has Firebase Admin role"
+          node functions/frontend/node_modules/firebase-tools/lib/bin/firebase.js apps:list WEB \
+            --project "$FIREBASE_PROJECT_ID" --non-interactive --json > "$RUNNER_TEMP/firebase-apps.json" || {
+              echo "::error::Cannot list registered web apps in $FIREBASE_PROJECT_ID using GCP_SA_KEY."
+              jq -r '.error // empty' "$RUNNER_TEMP/firebase-apps.json" >&2
+              exit 1
+            }
+          if ! jq -e '.result | type == "array" and length > 0' "$RUNNER_TEMP/firebase-apps.json" > /dev/null; then
+            echo "::error::Register a web app in the target Firebase project before deploying Hosting."
             exit 1
           fi
 
       - name: Deploy to Firebase Hosting
         working-directory: ./frontend
         run: |
-          firebase deploy --only hosting --project ${{ env.FIREBASE_PROJECT_ID }}
+          node ../functions/frontend/node_modules/firebase-tools/lib/bin/firebase.js deploy \
+            --only hosting --project "$FIREBASE_PROJECT_ID" --non-interactive
 
   # Performance testing
   performance-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [deploy-frontend]
     if: github.ref == 'refs/heads/main'
 
@@ -381,7 +354,7 @@ jobs:
 
   # Integration tests
   integration-test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [deploy-frontend, deploy-backend]
     if: github.ref == 'refs/heads/main'
 
@@ -425,7 +398,7 @@ jobs:
 
   # Monitoring and notifications
   post-deployment:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [deploy-frontend, deploy-backend, performance-test, integration-test]
     if: always() && github.ref == 'refs/heads/main'
     env:
@@ -464,7 +437,7 @@ jobs:
 
   # Automated monitoring setup
   setup-monitoring:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [deploy-frontend, deploy-backend]
     if: github.ref == 'refs/heads/main'
     env:

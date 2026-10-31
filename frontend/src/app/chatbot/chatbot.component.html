@@ -38,7 +38,7 @@
 
   <!-- Messages Container -->
   <div #messagesContainer class="messages-container" [@messageAnimation]>
-    @for (message of messages$ | async; track trackMessage($index, message)) {
+    @for (message of messages$ | async; track message.id) {
       <div
         class="message-wrapper"
         [class.user]="message.sender === 'user'"
@@ -149,7 +149,7 @@
           class="message-input"
           rows="1"
           (keydown)="onKeyDown($event)"
-          [disabled]="!(isConnected$ | async)"
+          [disabled]="(isConnected$ | async) !== true"
         >
         </textarea>
 
@@ -158,12 +158,12 @@
           class="send-button"
           [disabled]="
             messageForm.invalid ||
-            !(isConnected$ | async) ||
+            (isConnected$ | async) !== true ||
             (isTyping$ | async)
           "
           title="Send message"
         >
-          @if (!(isTyping$ | async)) {
+          @if ((isTyping$ | async) !== true) {
             <span>🚀</span>
           }
           @if (isTyping$ | async) {
@@ -191,7 +191,7 @@
   </div>
 
   <!-- Connection Status -->
-  @if (!(isConnected$ | async)) {
+  @if ((isConnected$ | async) !== true) {
     <div class="connection-status">
       <div class="reconnecting-indicator">
         <span class="reconnect-spinner">🔄</span>
@@ -210,7 +210,7 @@
   >
     <span class="toggle-icon">🌸</span>
     <span class="toggle-text">Chat</span>
-    @if ((messages$ | async)?.length > 1) {
+    @if (((messages$ | async)?.length ?? 0) > 1) {
       <span class="unread-indicator">•</span>
     }
   </button>

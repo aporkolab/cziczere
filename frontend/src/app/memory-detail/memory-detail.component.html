@@ -1,6 +1,7 @@
-<div class="overlay" (click)="onClose()">
-  <div class="detail-card" (click)="$event.stopPropagation()">
-    <button class="close-button" (click)="onClose()">×</button>
+<div class="overlay">
+  <button type="button" class="backdrop" tabindex="-1" aria-label="Close memory details" (click)="onClose()"></button>
+  <div class="detail-card" role="dialog" aria-label="Memory details">
+    <button type="button" class="close-button" aria-label="Close memory details" (click)="onClose()">×</button>
     @if (memory) {
       <div>
         <img

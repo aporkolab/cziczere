@@ -6,6 +6,7 @@ import {
   OnDestroy,
   Output,
   EventEmitter,
+  inject,
 } from "@angular/core";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
@@ -38,7 +39,7 @@ export class GardenComponent implements AfterViewInit, OnDestroy {
   private audioPlayer = new Audio();
   private emptyGardenCenter: THREE.Mesh | null = null;
 
-  constructor(private apiService: ApiService) {}
+  private readonly apiService = inject(ApiService);
 
   ngAfterViewInit(): void {
     this.createScene();
@@ -60,8 +61,8 @@ export class GardenComponent implements AfterViewInit, OnDestroy {
     this.renderer.dispose();
     this.scene.traverse((object) => {
       if (object instanceof THREE.Mesh || object instanceof THREE.Points) {
-        (object as any).geometry.dispose();
-        const material = (object as any).material;
+        object.geometry.dispose();
+        const material = object.material;
         if (Array.isArray(material)) {
           material.forEach((mat) => mat.dispose());
         } else {
@@ -225,13 +226,11 @@ export class GardenComponent implements AfterViewInit, OnDestroy {
   }
 
   private startRenderingLoop(): void {
-    const component: GardenComponent = this;
-    (function render() {
-      requestAnimationFrame(render);
-      component.controls.update();
-      component.animateWeather();
-      component.renderer.render(component.scene, component.camera);
-    })();
+    this.renderer.setAnimationLoop(() => {
+      this.controls.update();
+      this.animateWeather();
+      this.renderer.render(this.scene, this.camera);
+    });
   }
 
   private getAspectRatio(): number {
